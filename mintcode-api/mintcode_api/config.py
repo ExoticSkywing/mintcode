@@ -10,5 +10,7 @@ class Settings(BaseSettings):
     voucher_secret: str
     database_url: str
 
+    redeem_process_mode: str = "inline"
+
 
 settings = Settings()

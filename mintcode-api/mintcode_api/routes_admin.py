@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from mintcode_api.config import settings
 from mintcode_api.db import SessionLocal
-from mintcode_api.models import Voucher, VoucherBatch
+from mintcode_api.models import RedeemTask, Voucher, VoucherBatch
 from mintcode_api.schemas import AdminGenerateVouchersRequest
 from mintcode_api.security import require_admin
 from mintcode_api.vouchers import generate_voucher_codes
@@ -125,3 +125,46 @@ def admin_export_vouchers_latest_by_sku(sku_id: str, db: Session = Depends(_get_
         select(Voucher.code).where(Voucher.batch_id == int(batch_id)).order_by(Voucher.id.asc())
     ).scalars().all()
     return "\n".join(codes)
+
+
+@router.get("/redeem/tasks")
+def admin_list_redeem_tasks(
+    status: Optional[str] = None,
+    sku_id: Optional[str] = None,
+    limit: int = 50,
+    before_id: Optional[int] = None,
+    db: Session = Depends(_get_db),
+) -> List[Dict[str, Any]]:
+    limit = max(1, min(int(limit), 200))
+
+    q = (
+        select(RedeemTask, Voucher.code)
+        .join(Voucher, Voucher.id == RedeemTask.voucher_id)
+        .order_by(RedeemTask.id.desc())
+        .limit(limit)
+    )
+    if status:
+        q = q.where(RedeemTask.status == status)
+    if sku_id:
+        q = q.where(RedeemTask.sku_id == sku_id)
+    if before_id is not None:
+        q = q.where(RedeemTask.id < int(before_id))
+
+    rows = db.execute(q).all()
+    out: List[Dict[str, Any]] = []
+    for task, voucher_code in rows:
+        created_at: dt.datetime = task.created_at
+        updated_at: dt.datetime = task.updated_at
+        out.append(
+            {
+                "id": task.id,
+                "sku_id": task.sku_id,
+                "status": task.status,
+                "result_code": task.result_code,
+                "voucher_id": task.voucher_id,
+                "voucher_code": voucher_code,
+                "created_at": created_at.replace(tzinfo=dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+                "updated_at": updated_at.replace(tzinfo=dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+            }
+        )
+    return out

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from mintcode_api.config import settings
 from mintcode_api.db import SessionLocal
-from mintcode_api.models import RedeemTask, Voucher
+from mintcode_api.models import RedeemTask, RedeemTaskProviderState, Voucher
 from mintcode_api.schemas import RedeemCreateRequest, RedeemTaskResponse
 
 
@@ -63,11 +63,17 @@ def redeem_create(
     if existing is not None:
         if settings.redeem_process_mode == "inline" and existing.status in ("PENDING", "PROCESSING"):
             background_tasks.add_task(_process_task, existing.id)
+        st = db.execute(
+            select(RedeemTaskProviderState).where(RedeemTaskProviderState.task_id == existing.id).limit(1)
+        ).scalar_one_or_none()
         return RedeemTaskResponse(
             task_id=existing.id,
             sku_id=existing.sku_id,
             status=existing.status,
             result_code=existing.result_code,
+            phone=getattr(st, "phone", None),
+            order_id=getattr(st, "order_id", None),
+            upstream_status=getattr(st, "upstream_status", None),
         )
 
     task = RedeemTask(
@@ -86,11 +92,17 @@ def redeem_create(
         existing = db.execute(select(RedeemTask).where(RedeemTask.voucher_id == voucher.id).limit(1)).scalar_one()
         if settings.redeem_process_mode == "inline" and existing.status in ("PENDING", "PROCESSING"):
             background_tasks.add_task(_process_task, existing.id)
+        st = db.execute(
+            select(RedeemTaskProviderState).where(RedeemTaskProviderState.task_id == existing.id).limit(1)
+        ).scalar_one_or_none()
         return RedeemTaskResponse(
             task_id=existing.id,
             sku_id=existing.sku_id,
             status=existing.status,
             result_code=existing.result_code,
+            phone=getattr(st, "phone", None),
+            order_id=getattr(st, "order_id", None),
+            upstream_status=getattr(st, "upstream_status", None),
         )
 
     db.refresh(task)
@@ -105,4 +117,13 @@ def redeem_get(task_id: int, db: Session = Depends(_get_db)) -> RedeemTaskRespon
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not_found")
 
-    return RedeemTaskResponse(task_id=task.id, sku_id=task.sku_id, status=task.status, result_code=task.result_code)
+    st = db.execute(select(RedeemTaskProviderState).where(RedeemTaskProviderState.task_id == task.id).limit(1)).scalar_one_or_none()
+    return RedeemTaskResponse(
+        task_id=task.id,
+        sku_id=task.sku_id,
+        status=task.status,
+        result_code=task.result_code,
+        phone=getattr(st, "phone", None),
+        order_id=getattr(st, "order_id", None),
+        upstream_status=getattr(st, "upstream_status", None),
+    )

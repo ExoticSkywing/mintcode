@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from mintcode_api.config import settings
 from mintcode_api.db import SessionLocal
-from mintcode_api.models import RedeemTask, SkuProviderConfig, Voucher, VoucherBatch
+from mintcode_api.models import RedeemTask, RedeemTaskProviderState, SkuProviderConfig, Voucher, VoucherBatch
 from mintcode_api.schemas import AdminGenerateVouchersRequest, AdminSkuProviderConfigResponse, AdminSkuProviderConfigUpsertRequest
 from mintcode_api.security import require_admin
 from mintcode_api.vouchers import generate_voucher_codes
@@ -209,8 +209,9 @@ def admin_list_redeem_tasks(
     limit = max(1, min(int(limit), 200))
 
     q = (
-        select(RedeemTask, Voucher.code)
+        select(RedeemTask, Voucher.code, RedeemTaskProviderState)
         .join(Voucher, Voucher.id == RedeemTask.voucher_id)
+        .outerjoin(RedeemTaskProviderState, RedeemTaskProviderState.task_id == RedeemTask.id)
         .order_by(RedeemTask.id.desc())
         .limit(limit)
     )
@@ -223,7 +224,7 @@ def admin_list_redeem_tasks(
 
     rows = db.execute(q).all()
     out: List[Dict[str, Any]] = []
-    for task, voucher_code in rows:
+    for task, voucher_code, st in rows:
         created_at: dt.datetime = task.created_at
         updated_at: dt.datetime = task.updated_at
         out.append(
@@ -232,6 +233,10 @@ def admin_list_redeem_tasks(
                 "sku_id": task.sku_id,
                 "status": task.status,
                 "result_code": task.result_code,
+                "phone": getattr(st, "phone", None),
+                "order_id": getattr(st, "order_id", None),
+                "upstream_status": getattr(st, "upstream_status", None),
+                "last_error": getattr(st, "last_error", None),
                 "voucher_id": task.voucher_id,
                 "voucher_code": voucher_code,
                 "created_at": created_at.replace(tzinfo=dt.timezone.utc).isoformat().replace("+00:00", "Z"),

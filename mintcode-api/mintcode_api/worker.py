@@ -70,7 +70,7 @@ def _process_one(task: RedeemTask, db: Session) -> None:
             st.phone = order.phone
             st.upstream_status = str(order.status)
             st.next_poll_at = now + dt.timedelta(seconds=int(cfg.poll_interval_seconds))
-            task.status = "PENDING"
+            task.status = "WAITING_SMS"
             return
 
         order = Order.from_order_id(int(st.order_id))
@@ -104,11 +104,11 @@ def _process_one(task: RedeemTask, db: Session) -> None:
             return
 
         st.next_poll_at = now + dt.timedelta(seconds=int(cfg.poll_interval_seconds))
-        task.status = "PENDING"
+        task.status = "WAITING_SMS"
     except Exception as e:
         st.last_error = str(e)
         st.next_poll_at = now + dt.timedelta(seconds=max(5, int(getattr(cfg, "poll_interval_seconds", 5))))
-        task.status = "PENDING"
+        task.status = "WAITING_SMS"
 
 
 def _claim_next(db: Session) -> Optional[RedeemTask]:
@@ -117,7 +117,7 @@ def _claim_next(db: Session) -> Optional[RedeemTask]:
         task_id = db.execute(
             select(RedeemTask.id)
             .outerjoin(RedeemTaskProviderState, RedeemTaskProviderState.task_id == RedeemTask.id)
-            .where(RedeemTask.status == "PENDING")
+            .where(RedeemTask.status.in_(["PENDING", "WAITING_SMS"]))
             .where(or_(RedeemTaskProviderState.next_poll_at.is_(None), RedeemTaskProviderState.next_poll_at <= now))
             .order_by(RedeemTask.id.asc())
             .limit(1)
@@ -128,7 +128,7 @@ def _claim_next(db: Session) -> Optional[RedeemTask]:
         res = db.execute(
             update(RedeemTask)
             .where(RedeemTask.id == task_id)
-            .where(RedeemTask.status == "PENDING")
+            .where(RedeemTask.status.in_(["PENDING", "WAITING_SMS"]))
             .values(status="PROCESSING")
         )
         if getattr(res, "rowcount", 0) == 1:

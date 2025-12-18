@@ -25,6 +25,9 @@ class RedeemTaskResponse(BaseModel):
     sku_id: str
     status: str
     result_code: Optional[str] = None
+    phone: Optional[str] = None
+    order_id: Optional[int] = None
+    upstream_status: Optional[str] = None
 
 
 class AdminSkuProviderConfigUpsertRequest(BaseModel):

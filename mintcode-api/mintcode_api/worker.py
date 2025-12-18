@@ -78,6 +78,11 @@ def _process_one(task: RedeemTask, db: Session) -> None:
         st.upstream_status = str(checked.status)
 
         sms_list = checked.sms or []
+        if not sms_list:
+            try:
+                sms_list = fs.user.get_sms_inbox_list(checked) or []
+            except Exception:
+                sms_list = []
         code = None
         for sms in reversed(sms_list):
             if getattr(sms, "activation_code", None):

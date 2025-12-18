@@ -116,6 +116,50 @@ def create_app() -> FastAPI:
     </div>
 
     <div class=\"card\">
+      <h3>SKU Provider Config (5sim)</h3>
+      <div class=\"row\">
+        <div>
+          <label>SKU ID</label><br />
+          <input id=\"cfgSku\" class=\"mono\" placeholder=\"e.g. tg1\" />
+        </div>
+        <div>
+          <label>Category</label><br />
+          <select id=\"cfgCategory\">
+            <option value=\"activation\" selected>activation</option>
+            <option value=\"hosting\">hosting</option>
+          </select>
+        </div>
+        <div>
+          <label>Country</label><br />
+          <input id=\"cfgCountry\" class=\"mono\" placeholder=\"e.g. russia / any\" />
+        </div>
+        <div>
+          <label>Operator</label><br />
+          <input id=\"cfgOperator\" class=\"mono\" placeholder=\"e.g. any\" />
+        </div>
+        <div>
+          <label>Product</label><br />
+          <input id=\"cfgProduct\" class=\"mono\" placeholder=\"e.g. telegram\" />
+        </div>
+        <div>
+          <label>Poll (sec)</label><br />
+          <input id=\"cfgPoll\" type=\"number\" value=\"5\" min=\"1\" max=\"300\" />
+        </div>
+        <div>
+          <label>Reuse</label><br />
+          <input id=\"cfgReuse\" type=\"checkbox\" />
+        </div>
+        <div>
+          <label>Voice</label><br />
+          <input id=\"cfgVoice\" type=\"checkbox\" />
+        </div>
+        <button id=\"cfgLoad\">Load</button>
+        <button id=\"cfgSave\">Save</button>
+      </div>
+      <div class=\"muted\" style=\"margin-top: 10px\" id=\"cfgOut\"></div>
+    </div>
+
+    <div class=\"card\">
       <h3>Redeem (Create Task)</h3>
       <div class=\"row\">
         <div style=\"flex: 1\">
@@ -267,6 +311,53 @@ def create_app() -> FastAPI:
         await loadBatches();
       }
 
+      async function loadSkuConfig() {
+        setErr('');
+        $('cfgOut').textContent = '';
+        const sku = ($('cfgSku').value || '').trim();
+        if (!sku) {
+          $('cfgOut').textContent = 'Please input sku_id.';
+          return;
+        }
+        const res = await apiFetch('/admin/sku/' + encodeURIComponent(sku) + '/provider-config');
+        const data = await res.json();
+        $('cfgCategory').value = data.category || 'activation';
+        $('cfgCountry').value = data.country || '';
+        $('cfgOperator').value = data.operator || 'any';
+        $('cfgProduct').value = data.product || '';
+        $('cfgPoll').value = String(data.poll_interval_seconds || 5);
+        $('cfgReuse').checked = !!data.reuse;
+        $('cfgVoice').checked = !!data.voice;
+        $('cfgOut').textContent = 'Loaded.';
+      }
+
+      async function saveSkuConfig() {
+        setErr('');
+        $('cfgOut').textContent = '';
+        const sku = ($('cfgSku').value || '').trim();
+        if (!sku) {
+          $('cfgOut').textContent = 'Please input sku_id.';
+          return;
+        }
+        const payload = {
+          provider: 'fivesim',
+          category: $('cfgCategory').value,
+          country: ($('cfgCountry').value || '').trim(),
+          operator: ($('cfgOperator').value || '').trim() || 'any',
+          product: ($('cfgProduct').value || '').trim(),
+          reuse: $('cfgReuse').checked,
+          voice: $('cfgVoice').checked,
+          poll_interval_seconds: Number($('cfgPoll').value || 5),
+        };
+        const res = await apiFetch('/admin/sku/' + encodeURIComponent(sku) + '/provider-config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        $('cfgOut').textContent = 'Saved for sku_id=' + data.sku_id;
+      }
+
       async function doRedeem() {
         setErr('');
         $('redeemOut').textContent = '';
@@ -321,6 +412,8 @@ def create_app() -> FastAPI:
       $('loadBatches').addEventListener('click', () => loadBatches().catch(e => setErr(String(e))));
       $('loadTasks').addEventListener('click', () => loadTasks().catch(e => setErr(String(e))));
       $('doGenerate').addEventListener('click', () => doGenerate().catch(e => setErr(String(e))));
+      $('cfgLoad').addEventListener('click', () => loadSkuConfig().catch(e => setErr(String(e))));
+      $('cfgSave').addEventListener('click', () => saveSkuConfig().catch(e => setErr(String(e))));
       $('doRedeem').addEventListener('click', () => doRedeem().catch(e => setErr(String(e))));
       $('autoRefresh').addEventListener('change', resetAutoRefresh);
 

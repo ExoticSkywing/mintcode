@@ -25,3 +25,26 @@ class RedeemTaskResponse(BaseModel):
     sku_id: str
     status: str
     result_code: Optional[str] = None
+
+
+class AdminSkuProviderConfigUpsertRequest(BaseModel):
+    provider: str = Field(default="fivesim", max_length=32)
+    category: str = Field(default="activation", max_length=16)
+    country: str = Field(max_length=64)
+    operator: str = Field(default="any", max_length=64)
+    product: str = Field(max_length=64)
+    reuse: bool = Field(default=False)
+    voice: bool = Field(default=False)
+    poll_interval_seconds: int = Field(default=5, ge=1, le=300)
+
+
+class AdminSkuProviderConfigResponse(BaseModel):
+    sku_id: str
+    provider: str
+    category: str
+    country: str
+    operator: str
+    product: str
+    reuse: bool
+    voice: bool
+    poll_interval_seconds: int

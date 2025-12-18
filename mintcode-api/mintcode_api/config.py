@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Optional
 
 
 class Settings(BaseSettings):
@@ -11,6 +12,8 @@ class Settings(BaseSettings):
     database_url: str
 
     redeem_process_mode: str = "inline"
+
+    fivesim_api_key: Optional[str] = None
 
 
 settings = Settings()

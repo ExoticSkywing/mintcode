@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 
 from mintcode_api.config import settings
 from mintcode_api.db import SessionLocal
-from mintcode_api.models import RedeemTask, Voucher, VoucherBatch
-from mintcode_api.schemas import AdminGenerateVouchersRequest
+from mintcode_api.models import RedeemTask, SkuProviderConfig, Voucher, VoucherBatch
+from mintcode_api.schemas import AdminGenerateVouchersRequest, AdminSkuProviderConfigResponse, AdminSkuProviderConfigUpsertRequest
 from mintcode_api.security import require_admin
 from mintcode_api.vouchers import generate_voucher_codes
 
@@ -103,6 +103,77 @@ def admin_list_batches(
             }
         )
     return out
+
+
+@router.get("/sku/{sku_id}/provider-config", response_model=AdminSkuProviderConfigResponse)
+def admin_get_sku_provider_config(sku_id: str, db: Session = Depends(_get_db)) -> AdminSkuProviderConfigResponse:
+    row = db.execute(select(SkuProviderConfig).where(SkuProviderConfig.sku_id == sku_id).limit(1)).scalar_one_or_none()
+    if row is None:
+        return AdminSkuProviderConfigResponse(
+            sku_id=sku_id,
+            provider="fivesim",
+            category="activation",
+            country="",
+            operator="any",
+            product="",
+            reuse=False,
+            voice=False,
+            poll_interval_seconds=5,
+        )
+    return AdminSkuProviderConfigResponse(
+        sku_id=row.sku_id,
+        provider=row.provider,
+        category=row.category,
+        country=row.country,
+        operator=row.operator,
+        product=row.product,
+        reuse=bool(row.reuse),
+        voice=bool(row.voice),
+        poll_interval_seconds=int(row.poll_interval_seconds),
+    )
+
+
+@router.put("/sku/{sku_id}/provider-config", response_model=AdminSkuProviderConfigResponse)
+def admin_upsert_sku_provider_config(
+    sku_id: str,
+    payload: AdminSkuProviderConfigUpsertRequest,
+    db: Session = Depends(_get_db),
+) -> AdminSkuProviderConfigResponse:
+    row = db.execute(select(SkuProviderConfig).where(SkuProviderConfig.sku_id == sku_id).limit(1)).scalar_one_or_none()
+    if row is None:
+        row = SkuProviderConfig(
+            sku_id=sku_id,
+            provider=payload.provider,
+            category=payload.category,
+            country=payload.country,
+            operator=payload.operator,
+            product=payload.product,
+            reuse=payload.reuse,
+            voice=payload.voice,
+            poll_interval_seconds=payload.poll_interval_seconds,
+        )
+        db.add(row)
+    else:
+        row.provider = payload.provider
+        row.category = payload.category
+        row.country = payload.country
+        row.operator = payload.operator
+        row.product = payload.product
+        row.reuse = payload.reuse
+        row.voice = payload.voice
+        row.poll_interval_seconds = payload.poll_interval_seconds
+    db.commit()
+    return AdminSkuProviderConfigResponse(
+        sku_id=row.sku_id,
+        provider=row.provider,
+        category=row.category,
+        country=row.country,
+        operator=row.operator,
+        product=row.product,
+        reuse=bool(row.reuse),
+        voice=bool(row.voice),
+        poll_interval_seconds=int(row.poll_interval_seconds),
+    )
 
 
 @router.get("/vouchers/export/batch/{batch_id}", response_class=PlainTextResponse)

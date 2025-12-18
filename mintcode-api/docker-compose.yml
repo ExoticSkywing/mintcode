@@ -6,6 +6,7 @@ services:
       VOUCHER_SECRET: ${VOUCHER_SECRET:-change-me-too}
       DATABASE_URL: ${DATABASE_URL}
       REDEEM_PROCESS_MODE: external
+      FIVESIM_API_KEY: ${FIVESIM_API_KEY:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -19,5 +20,6 @@ services:
       VOUCHER_SECRET: ${VOUCHER_SECRET:-change-me-too}
       DATABASE_URL: ${DATABASE_URL}
       REDEEM_PROCESS_MODE: external
+      FIVESIM_API_KEY: ${FIVESIM_API_KEY:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"

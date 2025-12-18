@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from mintcode_api.db import Base
@@ -52,3 +52,39 @@ class RedeemTask(Base):
     )
 
     voucher: Mapped[Voucher] = relationship("Voucher")
+
+
+class SkuProviderConfig(Base):
+    __tablename__ = "sku_provider_configs"
+
+    sku_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, default="fivesim")
+    category: Mapped[str] = mapped_column(String(16), nullable=False, default="activation")
+    country: Mapped[str] = mapped_column(String(64), nullable=False)
+    operator: Mapped[str] = mapped_column(String(64), nullable=False, default="any")
+    product: Mapped[str] = mapped_column(String(64), nullable=False)
+    reuse: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    voice: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    poll_interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, nullable=False, default=lambda: dt.datetime.utcnow())
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: dt.datetime.utcnow(), onupdate=lambda: dt.datetime.utcnow()
+    )
+
+
+class RedeemTaskProviderState(Base):
+    __tablename__ = "redeem_task_provider_states"
+
+    task_id: Mapped[int] = mapped_column(Integer, ForeignKey("redeem_tasks.id"), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, default="fivesim")
+    order_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    upstream_status: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    next_poll_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime, nullable=True)
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, nullable=False, default=lambda: dt.datetime.utcnow())
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: dt.datetime.utcnow(), onupdate=lambda: dt.datetime.utcnow()
+    )
+
+    task: Mapped[RedeemTask] = relationship("RedeemTask")

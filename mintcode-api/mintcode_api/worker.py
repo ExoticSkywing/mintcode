@@ -294,7 +294,8 @@ def _claim_next(db: Session) -> Optional[RedeemTask]:
 
 
 def run_loop(poll_seconds: float = 1.0) -> None:
-    Base.metadata.create_all(bind=engine)
+    if bool(getattr(settings, "db_auto_create_tables", True)):
+        Base.metadata.create_all(bind=engine)
     while True:
         db = SessionLocal()
         try:

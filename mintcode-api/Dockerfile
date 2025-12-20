@@ -9,6 +9,9 @@ COPY requirements.txt ./
 COPY requirements-worker.txt ./
 RUN pip install --no-cache-dir -r requirements.txt -r requirements-worker.txt
 
+COPY alembic.ini ./
+COPY alembic ./alembic
+
 COPY mintcode_api ./mintcode_api
 
 EXPOSE 8000

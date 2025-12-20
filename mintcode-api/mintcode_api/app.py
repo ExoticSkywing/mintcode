@@ -743,7 +743,8 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     def _startup() -> None:
-        Base.metadata.create_all(bind=engine)
+        if bool(getattr(settings, "db_auto_create_tables", True)):
+            Base.metadata.create_all(bind=engine)
 
     app.include_router(health_router)
     app.include_router(admin_router)

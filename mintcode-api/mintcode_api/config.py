@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     voucher_secret: str
     database_url: str
 
+    db_auto_create_tables: bool = True
+
     redeem_process_mode: str = "inline"
 
     redeem_wait_seconds: int = 120

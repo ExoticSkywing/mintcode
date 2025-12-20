@@ -16,7 +16,8 @@ from mintcode_api.models import RedeemTask, RedeemTaskProviderState, SkuProvider
 
 
 def _process_one(task: RedeemTask, db: Session) -> None:
-    from fivesim import ActivationProduct, Country, FiveSim, HostingProduct, Operator, Order, OrderAction, Status
+    from fivesim import ActivationProduct, Category, Country, FiveSim, HostingProduct, Operator, Order, OrderAction, Status
+    from fivesim.json_response import _parse_order
 
     now = dt.datetime.utcnow()
 
@@ -153,29 +154,72 @@ def _process_one(task: RedeemTask, db: Session) -> None:
                     return
                 else:
                     operator = SimpleNamespace(value=op)
-            if cfg.category == "hosting":
-                product = HostingProduct(cfg.product)
-            else:
-                product = ActivationProduct(cfg.product)
+            product_key = (cfg.product or "").strip().lower()
+            if not product_key:
+                st.last_error = "invalid_product=" + str(cfg.product)
+                task.status = "FAILED"
+                return
 
-            order = fs.user.buy_number(
-                country=country,
-                operator=operator,
-                product=product,
-                reuse=bool(cfg.reuse),
-                voice=bool(cfg.voice),
-            )
+            if not re.fullmatch(r"[a-z0-9_-]+", product_key):
+                st.last_error = "invalid_product=" + str(cfg.product)
+                task.status = "FAILED"
+                return
+
+            # SDK enums may lag behind 5sim official product list. If enum conversion fails,
+            # bypass SDK buy_number() (which enforces isinstance checks) and call the API path directly.
+            if cfg.category == "hosting":
+                try:
+                    product = HostingProduct(product_key)
+                    order = fs.user.buy_number(
+                        country=country,
+                        operator=operator,
+                        product=product,
+                        reuse=False,
+                        voice=False,
+                    )
+                except Exception:
+                    api_result = fs.user._GET(
+                        use_token=True,
+                        path=["buy", Category.HOSTING.value, country.value, operator.value, product_key],
+                        parameters={},
+                    )
+                    order = fs.user._parse_json(input=api_result, into_object=_parse_order)
+            else:
+                try:
+                    product = ActivationProduct(product_key)
+                    order = fs.user.buy_number(
+                        country=country,
+                        operator=operator,
+                        product=product,
+                        reuse=bool(cfg.reuse),
+                        voice=bool(cfg.voice),
+                    )
+                except Exception:
+                    params = {}
+                    if bool(cfg.reuse):
+                        params["reuse"] = "1"
+                    if bool(cfg.voice):
+                        params["voice"] = "1"
+                    api_result = fs.user._GET(
+                        use_token=True,
+                        path=["buy", Category.ACTIVATION.value, country.value, operator.value, product_key],
+                        parameters=params,
+                    )
+                    order = fs.user._parse_json(input=api_result, into_object=_parse_order)
+
             st.order_id = int(order.id)
             st.phone = order.phone
             st.upstream_status = str(order.status)
             st.expires_at = getattr(order, "expires_at", None)
             st.next_poll_at = now + dt.timedelta(seconds=int(cfg.poll_interval_seconds))
+            st.last_error = None
             task.status = "WAITING_SMS"
             return
 
         order = Order.from_order_id(int(st.order_id))
         checked = fs.user.order(OrderAction.CHECK, order)
         st.upstream_status = str(checked.status)
+        st.last_error = None
 
         sms_list = checked.sms or []
         if not sms_list:

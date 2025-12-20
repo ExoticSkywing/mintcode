@@ -13,6 +13,8 @@ class Settings(BaseSettings):
 
     redeem_process_mode: str = "inline"
 
+    redeem_wait_seconds: int = 120
+
     fivesim_api_key: Optional[str] = None
 
 

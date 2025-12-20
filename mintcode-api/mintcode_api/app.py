@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
+from mintcode_api.config import settings
 from mintcode_api.db import Base, engine
 from mintcode_api.routes_admin import router as admin_router
 from mintcode_api.routes_health import router as health_router
@@ -14,11 +15,11 @@ def create_app() -> FastAPI:
 
     @app.get("/admin-ui", response_class=HTMLResponse)
     def admin_ui() -> str:
-        return """<!doctype html>
-<html lang=\"en\">
+        html = """<!doctype html>
+<html lang="en">
   <head>
-    <meta charset=\"utf-8\" />
-    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>MintCode Admin UI</title>
     <style>
       :root { color-scheme: light dark; }
@@ -115,12 +116,12 @@ def create_app() -> FastAPI:
       </div>
     </div>
 
-    <div class=\"card\">
+    <div class="card">
       <h3>SKU Provider Config (5sim)</h3>
-      <div class=\"row\">
+      <div class="row">
         <div>
           <label>SKU ID</label><br />
-          <input id=\"cfgSku\" class=\"mono\" placeholder=\"e.g. tg1\" />
+          <input id="cfgSku" class="mono" placeholder="e.g. tg1" />
         </div>
         <div>
           <label>Category</label><br />
@@ -151,24 +152,60 @@ def create_app() -> FastAPI:
         </div>
         <div>
           <label>Voice</label><br />
-          <input id=\"cfgVoice\" type=\"checkbox\" />
+          <input id="cfgVoice" type="checkbox" />
         </div>
-        <button id=\"cfgLoad\">Load</button>
-        <button id=\"cfgSave\">Save</button>
+        <div>
+          <label>History</label><br />
+          <select id="cfgHist" style="min-width: 320px"></select>
+        </div>
+        <button id="cfgLoad">Load</button>
+        <button id="cfgSave">Save</button>
+        <button id="cfgHistLoad">Load History</button>
       </div>
-      <div class=\"muted\" style=\"margin-top: 10px\" id=\"cfgOut\"></div>
+      <div class="muted" style="margin-top: 10px" id="cfgOut"></div>
     </div>
 
-    <div class=\"card\">
-      <h3>Redeem (Create Task)</h3>
-      <div class=\"row\">
-        <div style=\"flex: 1\">
-          <label>Voucher Code</label><br />
-          <input id=\"redeemCode\" class=\"mono\" placeholder=\"paste voucher code here\" style=\"width: 100%\" />
+    <div class="card">
+      <div class="row">
+        <h3 style="margin: 0">Featured Provider Configs (Auto-collected)</h3>
+        <div class="right">
+          <label>SKU</label>
+          <input id="featSku" placeholder="optional" />
+          <button id="loadFeatured">Load</button>
         </div>
-        <button id=\"doRedeem\">Redeem</button>
       </div>
-      <div class=\"muted\" style=\"margin-top: 10px\" id=\"redeemOut\"></div>
+      <div style="overflow: auto; max-height: 260px">
+        <table>
+          <thead>
+            <tr>
+              <th>Count</th>
+              <th>Last</th>
+              <th>Country</th>
+              <th>Operator</th>
+              <th>Product</th>
+              <th>Reuse</th>
+              <th>Voice</th>
+              <th>Poll</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="featuredBody"></tbody>
+        </table>
+      </div>
+      <div class="muted" style="margin-top: 10px" id="featuredOut"></div>
+    </div>
+
+    <div class="card">
+      <h3>Redeem (Create Task)</h3>
+      <div class="row">
+        <div style="flex: 1">
+          <label>Voucher Code</label><br />
+          <input id="redeemCode" class="mono" placeholder="paste voucher code here" style="width: 100%" />
+        </div>
+        <button id="doRedeem">Redeem</button>
+      </div>
+      <div class="muted" style="margin-top: 10px" id="redeemOut"></div>
+      <div class="row" style="margin-top: 10px" id="redeemActions"></div>
     </div>
 
     <div class=\"card\">
@@ -179,9 +216,12 @@ def create_app() -> FastAPI:
           <select id=\"taskStatus\">
             <option value=\"\">(any)</option>
             <option value=\"PENDING\">PENDING</option>
+            <option value=\"WAITING_SMS\">WAITING_SMS</option>
             <option value=\"PROCESSING\">PROCESSING</option>
+            <option value=\"CODE_READY\">CODE_READY</option>
             <option value=\"DONE\">DONE</option>
             <option value=\"FAILED\">FAILED</option>
+            <option value=\"CANCELED\">CANCELED</option>
           </select>
           <label>SKU</label>
           <input id=\"taskSku\" placeholder=\"optional\" />
@@ -196,6 +236,11 @@ def create_app() -> FastAPI:
               <th>SKU</th>
               <th>Status</th>
               <th>Result</th>
+              <th>Phone</th>
+              <th>Order</th>
+              <th>Upstream</th>
+              <th>Error</th>
+              <th>Actions</th>
               <th>Voucher</th>
               <th>Updated</th>
             </tr>
@@ -209,9 +254,61 @@ def create_app() -> FastAPI:
     <script>
       const $ = (id) => document.getElementById(id);
       const storageKey = 'mintcode_admin_key';
+      const redeemWaitLimitSeconds = __REDEEM_WAIT_SECONDS__;
 
       function getAdminKey() {
         return ($('adminKey').value || '').trim();
+      }
+
+      let featuredItems = [];
+      async function loadFeatured() {
+        setErr('');
+        $('featuredOut').textContent = '';
+        const sku = (($('featSku').value || '').trim() || ($('cfgSku').value || '').trim());
+        if (!sku) {
+          $('featuredOut').textContent = 'Please input sku_id.';
+          return;
+        }
+        const res = await apiFetch('/admin/sku/' + encodeURIComponent(sku) + '/provider-config/successes?limit=50');
+        const data = await res.json();
+        featuredItems = Array.isArray(data) ? data : [];
+        const body = $('featuredBody');
+        body.innerHTML = '';
+        for (let i = 0; i < featuredItems.length; i++) {
+          const f = featuredItems[i];
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="mono">${f.success_count}</td>
+            <td class="mono">${(f.last_success_at || '').replace('T', ' ').replace('Z', '')}</td>
+            <td class="mono">${f.country}</td>
+            <td class="mono">${f.operator}</td>
+            <td class="mono">${f.product}</td>
+            <td class="mono">${f.reuse ? '1' : '0'}</td>
+            <td class="mono">${f.voice ? '1' : '0'}</td>
+            <td class="mono">${f.poll_interval_seconds}</td>
+            <td><button data-idx="${i}">Apply</button></td>
+          `;
+          tr.querySelector('button').addEventListener('click', () => {
+            try {
+              const idx = Number(tr.querySelector('button').getAttribute('data-idx'));
+              const item = featuredItems[idx];
+              if (!item) return;
+              $('cfgSku').value = item.sku_id;
+              $('cfgCategory').value = item.category || 'activation';
+              $('cfgCountry').value = item.country || '';
+              $('cfgOperator').value = item.operator || 'any';
+              $('cfgProduct').value = item.product || '';
+              $('cfgPoll').value = String(item.poll_interval_seconds || 5);
+              $('cfgReuse').checked = !!item.reuse;
+              $('cfgVoice').checked = !!item.voice;
+              $('cfgOut').textContent = 'Applied featured config. Click Save to set as current.';
+            } catch (e) {
+              setErr(String(e));
+            }
+          });
+          body.appendChild(tr);
+        }
+        $('featuredOut').textContent = 'Loaded ' + String(featuredItems.length) + ' items for sku_id=' + sku;
       }
 
       function setStatus(msg) {
@@ -280,14 +377,71 @@ def create_app() -> FastAPI:
         for (const t of data) {
           const tr = document.createElement('tr');
           const v = (t.voucher_code || '').slice(0, 12) + ((t.voucher_code || '').length > 12 ? '…' : '');
+          const p = (t.phone || '').slice(0, 18) + ((t.phone || '').length > 18 ? '…' : '');
+          const err = (t.last_error || '').slice(0, 20) + ((t.last_error || '').length > 20 ? '…' : '');
           tr.innerHTML = `
             <td class="mono">${t.id}</td>
             <td class="mono">${t.sku_id}</td>
             <td class="mono">${t.status}</td>
             <td class="mono">${t.result_code || ''}</td>
+            <td class="mono" title="${t.phone || ''}">${p}</td>
+            <td class="mono">${t.order_id || ''}</td>
+            <td class="mono">${t.upstream_status || ''}</td>
+            <td class="mono" title="${t.last_error || ''}">${err}</td>
+            <td class="mono actions"></td>
             <td class="mono" title="${t.voucher_code || ''}">${v}</td>
             <td class="mono">${t.updated_at}</td>
           `;
+
+          const actions = tr.querySelector('.actions');
+          const canCancel = (t.status === 'WAITING_SMS' || t.status === 'PENDING' || t.status === 'PROCESSING' || t.status === 'FAILED');
+          const canNext = (t.status === 'CANCELED');
+          const canComplete = (t.status === 'CODE_READY');
+          if (canCancel) {
+            const btnCancel = document.createElement('button');
+            btnCancel.textContent = '取消';
+            btnCancel.addEventListener('click', async () => {
+              try {
+                await apiFetch('/redeem/' + String(t.id) + '/cancel', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ code: t.voucher_code }),
+                });
+                await loadTasks();
+              } catch (e) { setErr(String(e)); }
+            });
+            actions.appendChild(btnCancel);
+          }
+          if (canNext) {
+            const btnNext = document.createElement('button');
+            btnNext.textContent = '购买下一个号码';
+            btnNext.addEventListener('click', async () => {
+              try {
+                await apiFetch('/redeem/' + String(t.id) + '/next', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ code: t.voucher_code }),
+                });
+                await loadTasks();
+              } catch (e) { setErr(String(e)); }
+            });
+            actions.appendChild(btnNext);
+          }
+          if (canComplete) {
+            const btnComplete = document.createElement('button');
+            btnComplete.textContent = '完成';
+            btnComplete.addEventListener('click', async () => {
+              try {
+                await apiFetch('/redeem/' + String(t.id) + '/complete', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ code: t.voucher_code }),
+                });
+                await loadTasks();
+              } catch (e) { setErr(String(e)); }
+            });
+            actions.appendChild(btnComplete);
+          }
           body.appendChild(tr);
         }
       }
@@ -329,6 +483,44 @@ def create_app() -> FastAPI:
         $('cfgReuse').checked = !!data.reuse;
         $('cfgVoice').checked = !!data.voice;
         $('cfgOut').textContent = 'Loaded.';
+        await loadSkuConfigHistory();
+      }
+
+      let cfgHistItems = [];
+      async function loadSkuConfigHistory() {
+        const sku = ($('cfgSku').value || '').trim();
+        if (!sku) return;
+        const sel = $('cfgHist');
+        sel.innerHTML = '';
+        cfgHistItems = [];
+        try {
+          const res = await apiFetch('/admin/sku/' + encodeURIComponent(sku) + '/provider-config/history?limit=30');
+          const data = await res.json();
+          if (!Array.isArray(data)) return;
+          cfgHistItems = data;
+          for (let i = 0; i < data.length; i++) {
+            const h = data[i];
+            const opt = document.createElement('option');
+            const label = `${h.created_at}  ${h.country}/${h.operator}/${h.product}  poll=${h.poll_interval_seconds}`;
+            opt.value = String(i);
+            opt.textContent = label;
+            sel.appendChild(opt);
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      function applyHistoryItem(h) {
+        if (!h) return;
+        $('cfgCategory').value = h.category || 'activation';
+        $('cfgCountry').value = h.country || '';
+        $('cfgOperator').value = h.operator || 'any';
+        $('cfgProduct').value = h.product || '';
+        $('cfgPoll').value = String(h.poll_interval_seconds || 5);
+        $('cfgReuse').checked = !!h.reuse;
+        $('cfgVoice').checked = !!h.voice;
+        $('cfgOut').textContent = 'Loaded from history.';
       }
 
       async function saveSkuConfig() {
@@ -356,11 +548,13 @@ def create_app() -> FastAPI:
         });
         const data = await res.json();
         $('cfgOut').textContent = 'Saved for sku_id=' + data.sku_id;
+        await loadSkuConfigHistory();
       }
 
       async function doRedeem() {
         setErr('');
         $('redeemOut').textContent = '';
+        $('redeemActions').innerHTML = '';
         const code = ($('redeemCode').value || '').trim();
         if (!code) {
           $('redeemOut').textContent = 'Please input voucher code.';
@@ -373,7 +567,114 @@ def create_app() -> FastAPI:
         });
         const data = await res.json();
         $('redeemOut').textContent = `Created task_id=${data.task_id}, status=${data.status}`;
+        renderRedeemActions(data);
         await loadTasks();
+        pollRedeemStatus(data.task_id).catch(e => setErr(String(e)));
+      }
+
+      function renderRedeemActions(d) {
+        const wrap = $('redeemActions');
+        wrap.innerHTML = '';
+        if (!d || !d.task_id) return;
+
+        const voucherCode = ($('redeemCode').value || '').trim();
+        const taskId = String(d.task_id);
+
+        const mkBtn = (text, onClick) => {
+          const b = document.createElement('button');
+          b.textContent = text;
+          b.addEventListener('click', () => onClick().catch(e => setErr(String(e))));
+          return b;
+        };
+
+        const canCancel = (d.status === 'WAITING_SMS' || d.status === 'PENDING' || d.status === 'PROCESSING' || d.status === 'FAILED');
+        const canNext = (d.status === 'CANCELED' || d.status === 'FAILED');
+        const canComplete = (d.status === 'CODE_READY');
+
+        if (canCancel) {
+          wrap.appendChild(mkBtn('取消', async () => {
+            await apiFetch('/redeem/' + taskId + '/cancel', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ code: voucherCode }),
+            });
+            await pollRedeemStatus(Number(taskId));
+          }));
+        }
+
+        if (canNext) {
+          const hint = document.createElement('div');
+          hint.className = 'muted';
+          hint.style.marginRight = '10px';
+          hint.textContent = '该卡密当前已结束/取消。再次 Redeem 会继续使用同一个任务；如需重新下单请点击：';
+          wrap.appendChild(hint);
+          wrap.appendChild(mkBtn('购买下一个号码', async () => {
+            await apiFetch('/redeem/' + taskId + '/next', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ code: voucherCode }),
+            });
+            await pollRedeemStatus(Number(taskId));
+          }));
+        }
+
+        if (canComplete) {
+          wrap.appendChild(mkBtn('完成', async () => {
+            await apiFetch('/redeem/' + taskId + '/complete', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ code: voucherCode }),
+            });
+            await pollRedeemStatus(Number(taskId));
+          }));
+        }
+      }
+
+      let redeemPollTimer = null;
+      async function pollRedeemStatus(taskId) {
+        if (redeemPollTimer) clearInterval(redeemPollTimer);
+        redeemPollTimer = null;
+
+        const tick = async () => {
+          const r = await apiFetch('/redeem/' + String(taskId));
+          const d = await r.json();
+          const phone = d.phone ? ` phone=${d.phone}` : '';
+          const upstream = d.upstream_status ? ` upstream=${d.upstream_status}` : '';
+          const code = d.result_code ? ` code=${d.result_code}` : '';
+          let remain = '';
+          if (d.status === 'WAITING_SMS' || d.status === 'PROCESSING' || d.status === 'PENDING' || d.status === 'CODE_READY') {
+            let left = null;
+            if (d.expires_at) {
+              const ex = Date.parse(d.expires_at);
+              if (!Number.isNaN(ex)) {
+                left = Math.max(0, Math.floor((ex - Date.now()) / 1000));
+              }
+            }
+            if (left === null && d.provider_started_at) {
+              const ms = Date.parse(d.provider_started_at);
+              if (!Number.isNaN(ms)) {
+                const elapsed = Math.floor((Date.now() - ms) / 1000);
+                left = Math.max(0, redeemWaitLimitSeconds - elapsed);
+              }
+            }
+            if (left !== null) remain = ` wait_left=${left}s`;
+          }
+          $('redeemOut').textContent = `task_id=${d.task_id}, status=${d.status}${phone}${upstream}${remain}${code}`;
+          renderRedeemActions(d);
+          if (d.phone) {
+            $('redeemOut').textContent += `\nUse this phone to trigger SMS on the target platform (register/login).`;
+          }
+          if (d.status === 'DONE' || d.status === 'FAILED' || d.status === 'CANCELED') {
+            if (redeemPollTimer) clearInterval(redeemPollTimer);
+            redeemPollTimer = null;
+          }
+          await loadTasks();
+        };
+
+        await tick();
+        redeemPollTimer = setInterval(() => {
+          tick().catch(e => setErr(String(e)));
+        }, 1500);
       }
 
       function loadKeyFromStorage() {
@@ -414,6 +715,14 @@ def create_app() -> FastAPI:
       $('doGenerate').addEventListener('click', () => doGenerate().catch(e => setErr(String(e))));
       $('cfgLoad').addEventListener('click', () => loadSkuConfig().catch(e => setErr(String(e))));
       $('cfgSave').addEventListener('click', () => saveSkuConfig().catch(e => setErr(String(e))));
+      $('loadFeatured').addEventListener('click', () => loadFeatured().catch(e => setErr(String(e))));
+      $('cfgHistLoad').addEventListener('click', () => {
+        try {
+          const idx = Number(($('cfgHist').value || '0'));
+          const h = cfgHistItems[idx];
+          applyHistoryItem(h);
+        } catch (e) { setErr(String(e)); }
+      });
       $('doRedeem').addEventListener('click', () => doRedeem().catch(e => setErr(String(e))));
       $('autoRefresh').addEventListener('change', resetAutoRefresh);
 
@@ -423,6 +732,7 @@ def create_app() -> FastAPI:
     </script>
   </body>
 </html>"""
+        return html.replace("__REDEEM_WAIT_SECONDS__", str(int(settings.redeem_wait_seconds)))
 
     @app.on_event("startup")
     def _startup() -> None:

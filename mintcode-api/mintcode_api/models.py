@@ -51,7 +51,47 @@ class RedeemTask(Base):
         DateTime, nullable=False, default=lambda: dt.datetime.utcnow(), onupdate=lambda: dt.datetime.utcnow()
     )
 
-    voucher: Mapped[Voucher] = relationship("Voucher")
+
+class SkuProviderConfigHistory(Base):
+    __tablename__ = "sku_provider_config_histories"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    sku_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, default="fivesim")
+    category: Mapped[str] = mapped_column(String(16), nullable=False, default="activation")
+    country: Mapped[str] = mapped_column(String(64), nullable=False)
+    operator: Mapped[str] = mapped_column(String(64), nullable=False, default="any")
+    product: Mapped[str] = mapped_column(String(64), nullable=False)
+    reuse: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    voice: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    poll_interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, nullable=False, default=lambda: dt.datetime.utcnow())
+
+
+class SkuProviderConfigSuccess(Base):
+    __tablename__ = "sku_provider_config_successes"
+    __table_args__ = (
+        UniqueConstraint("sku_id", "fingerprint", name="uq_sku_provider_config_successes_sku_fp"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    sku_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(40), nullable=False)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, default="fivesim")
+    category: Mapped[str] = mapped_column(String(16), nullable=False, default="activation")
+    country: Mapped[str] = mapped_column(String(64), nullable=False)
+    operator: Mapped[str] = mapped_column(String(64), nullable=False, default="any")
+    product: Mapped[str] = mapped_column(String(64), nullable=False)
+    reuse: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    voice: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    poll_interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    success_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    first_success_at: Mapped[dt.datetime] = mapped_column(DateTime, nullable=False, default=lambda: dt.datetime.utcnow())
+    last_success_at: Mapped[dt.datetime] = mapped_column(DateTime, nullable=False, default=lambda: dt.datetime.utcnow())
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, nullable=False, default=lambda: dt.datetime.utcnow())
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: dt.datetime.utcnow(), onupdate=lambda: dt.datetime.utcnow()
+    )
 
 
 class SkuProviderConfig(Base):
@@ -80,6 +120,7 @@ class RedeemTaskProviderState(Base):
     order_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     phone: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     upstream_status: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    expires_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime, nullable=True)
     next_poll_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime, nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, nullable=False, default=lambda: dt.datetime.utcnow())

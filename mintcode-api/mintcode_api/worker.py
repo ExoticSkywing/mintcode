@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
+import re
 import time
+from types import SimpleNamespace
 from typing import Optional
 
 from sqlalchemy import or_, select, update
@@ -9,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from mintcode_api.config import settings
 from mintcode_api.db import Base, SessionLocal, engine
-from mintcode_api.models import RedeemTask, RedeemTaskProviderState, SkuProviderConfig
+from mintcode_api.models import RedeemTask, RedeemTaskProviderState, SkuProviderConfig, SkuProviderConfigSuccess
 
 
 def _process_one(task: RedeemTask, db: Session) -> None:
@@ -50,10 +53,106 @@ def _process_one(task: RedeemTask, db: Session) -> None:
 
     fs = FiveSim(api_key=settings.fivesim_api_key)
 
+    def _collect_success_config() -> None:
+        fp_src = "|".join(
+            [
+                str(task.sku_id),
+                str(cfg.provider),
+                str(cfg.category),
+                str(cfg.country),
+                str(cfg.operator),
+                str(cfg.product),
+                "1" if bool(cfg.reuse) else "0",
+                "1" if bool(cfg.voice) else "0",
+                str(int(cfg.poll_interval_seconds)),
+            ]
+        )
+        fp = hashlib.sha1(fp_src.encode("utf-8")).hexdigest()
+        row = db.execute(
+            select(SkuProviderConfigSuccess)
+            .where(SkuProviderConfigSuccess.sku_id == task.sku_id)
+            .where(SkuProviderConfigSuccess.fingerprint == fp)
+            .limit(1)
+        ).scalar_one_or_none()
+        if row is None:
+            row = SkuProviderConfigSuccess(
+                sku_id=task.sku_id,
+                fingerprint=fp,
+                provider=cfg.provider,
+                category=cfg.category,
+                country=cfg.country,
+                operator=cfg.operator,
+                product=cfg.product,
+                reuse=bool(cfg.reuse),
+                voice=bool(cfg.voice),
+                poll_interval_seconds=int(cfg.poll_interval_seconds),
+                success_count=1,
+                first_success_at=now,
+                last_success_at=now,
+            )
+            db.add(row)
+        else:
+            row.success_count = int(row.success_count) + 1
+            row.last_success_at = now
+
     try:
+        if task.status == "CANCELED":
+            return
+
+        if task.status == "DONE":
+            return
+
+        if task.result_code and st.order_id is not None and st.expires_at is not None and now >= st.expires_at:
+            try:
+                fs.user.order(OrderAction.FINISH, Order.from_order_id(int(st.order_id)))
+            except Exception:
+                pass
+            task.status = "DONE"
+            return
+
+        if task.status == "CODE_READY":
+            if st.order_id is None:
+                return
+            if st.expires_at is not None and now >= st.expires_at:
+                try:
+                    fs.user.order(OrderAction.FINISH, Order.from_order_id(int(st.order_id)))
+                except Exception:
+                    pass
+                task.status = "DONE"
+            return
+
+        if st.order_id is not None and task.status in ("PENDING", "PROCESSING", "WAITING_SMS"):
+            try:
+                deadline = st.expires_at
+                if deadline is None:
+                    started_at = getattr(st, "created_at", None)
+                    if started_at is not None:
+                        deadline = started_at + dt.timedelta(seconds=float(settings.redeem_wait_seconds))
+                if deadline is not None and now >= deadline:
+                    try:
+                        fs.user.order(OrderAction.CANCEL, Order.from_order_id(int(st.order_id)))
+                    except Exception:
+                        pass
+                    task.status = "FAILED"
+                    st.last_error = "expired"
+                    return
+            except Exception:
+                pass
+
         if st.order_id is None:
             country = Country(cfg.country)
-            operator = Operator(cfg.operator)
+            op = (cfg.operator or "").strip().lower()
+            try:
+                operator = Operator(op)
+            except Exception:
+                if op == "any":
+                    operator = Operator.ANY_OPERATOR
+                elif not re.fullmatch(r"[a-z0-9]+", op):
+                    st.last_error = "invalid_operator=" + str(cfg.operator)
+                    task.status = "FAILED"
+                    return
+                else:
+                    operator = SimpleNamespace(value=op)
             if cfg.category == "hosting":
                 product = HostingProduct(cfg.product)
             else:
@@ -69,6 +168,7 @@ def _process_one(task: RedeemTask, db: Session) -> None:
             st.order_id = int(order.id)
             st.phone = order.phone
             st.upstream_status = str(order.status)
+            st.expires_at = getattr(order, "expires_at", None)
             st.next_poll_at = now + dt.timedelta(seconds=int(cfg.poll_interval_seconds))
             task.status = "WAITING_SMS"
             return
@@ -90,12 +190,11 @@ def _process_one(task: RedeemTask, db: Session) -> None:
                 break
 
         if code:
+            already_had_code = bool(task.result_code)
             task.result_code = code
-            task.status = "DONE"
-            try:
-                fs.user.order(OrderAction.FINISH, checked)
-            except Exception:
-                pass
+            task.status = "CODE_READY"
+            if not already_had_code:
+                _collect_success_config()
             return
 
         if checked.status in (Status.CANCELED, Status.TIMEOUT, Status.BANNED):
@@ -117,7 +216,12 @@ def _claim_next(db: Session) -> Optional[RedeemTask]:
         task_id = db.execute(
             select(RedeemTask.id)
             .outerjoin(RedeemTaskProviderState, RedeemTaskProviderState.task_id == RedeemTask.id)
-            .where(RedeemTask.status.in_(["PENDING", "WAITING_SMS"]))
+            .where(
+                or_(
+                    RedeemTask.status.in_(["PENDING", "WAITING_SMS"]),
+                    (RedeemTask.status == "CODE_READY") & (RedeemTaskProviderState.expires_at.is_not(None)) & (RedeemTaskProviderState.expires_at <= now),
+                )
+            )
             .where(or_(RedeemTaskProviderState.next_poll_at.is_(None), RedeemTaskProviderState.next_poll_at <= now))
             .order_by(RedeemTask.id.asc())
             .limit(1)
@@ -128,7 +232,7 @@ def _claim_next(db: Session) -> Optional[RedeemTask]:
         res = db.execute(
             update(RedeemTask)
             .where(RedeemTask.id == task_id)
-            .where(RedeemTask.status.in_(["PENDING", "WAITING_SMS"]))
+            .where(RedeemTask.status.in_(["PENDING", "WAITING_SMS", "CODE_READY"]))
             .values(status="PROCESSING")
         )
         if getattr(res, "rowcount", 0) == 1:

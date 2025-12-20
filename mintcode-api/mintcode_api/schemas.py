@@ -28,6 +28,12 @@ class RedeemTaskResponse(BaseModel):
     phone: Optional[str] = None
     order_id: Optional[int] = None
     upstream_status: Optional[str] = None
+    provider_started_at: Optional[str] = None
+    expires_at: Optional[str] = None
+
+
+class RedeemTaskActionRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=128)
 
 
 class AdminSkuProviderConfigUpsertRequest(BaseModel):
@@ -51,3 +57,34 @@ class AdminSkuProviderConfigResponse(BaseModel):
     reuse: bool
     voice: bool
     poll_interval_seconds: int
+
+
+class AdminSkuProviderConfigHistoryItem(BaseModel):
+    id: int
+    sku_id: str
+    provider: str
+    category: str
+    country: str
+    operator: str
+    product: str
+    reuse: bool
+    voice: bool
+    poll_interval_seconds: int
+    created_at: str
+
+
+class AdminSkuProviderConfigSuccessItem(BaseModel):
+    id: int
+    sku_id: str
+    fingerprint: str
+    provider: str
+    category: str
+    country: str
+    operator: str
+    product: str
+    reuse: bool
+    voice: bool
+    poll_interval_seconds: int
+    success_count: int
+    first_success_at: str
+    last_success_at: str

@@ -10,8 +10,22 @@ from sqlalchemy.orm import Session
 
 from mintcode_api.config import settings
 from mintcode_api.db import SessionLocal
-from mintcode_api.models import RedeemTask, RedeemTaskProviderState, SkuProviderConfig, Voucher, VoucherBatch
-from mintcode_api.schemas import AdminGenerateVouchersRequest, AdminSkuProviderConfigResponse, AdminSkuProviderConfigUpsertRequest
+from mintcode_api.models import (
+    RedeemTask,
+    RedeemTaskProviderState,
+    SkuProviderConfig,
+    SkuProviderConfigHistory,
+    SkuProviderConfigSuccess,
+    Voucher,
+    VoucherBatch,
+)
+from mintcode_api.schemas import (
+    AdminGenerateVouchersRequest,
+    AdminSkuProviderConfigHistoryItem,
+    AdminSkuProviderConfigResponse,
+    AdminSkuProviderConfigSuccessItem,
+    AdminSkuProviderConfigUpsertRequest,
+)
 from mintcode_api.security import require_admin
 from mintcode_api.vouchers import generate_voucher_codes
 
@@ -105,6 +119,44 @@ def admin_list_batches(
     return out
 
 
+@router.get("/sku/{sku_id}/provider-config/successes", response_model=List[AdminSkuProviderConfigSuccessItem])
+def admin_list_sku_provider_config_successes(
+    sku_id: str,
+    limit: int = 50,
+    db: Session = Depends(_get_db),
+) -> List[AdminSkuProviderConfigSuccessItem]:
+    limit = max(1, min(int(limit), 200))
+    rows = db.execute(
+        select(SkuProviderConfigSuccess)
+        .where(SkuProviderConfigSuccess.sku_id == sku_id)
+        .order_by(SkuProviderConfigSuccess.success_count.desc(), SkuProviderConfigSuccess.id.desc())
+        .limit(limit)
+    ).scalars().all()
+    out: List[AdminSkuProviderConfigSuccessItem] = []
+    for r in rows:
+        first_success_at: dt.datetime = r.first_success_at
+        last_success_at: dt.datetime = r.last_success_at
+        out.append(
+            AdminSkuProviderConfigSuccessItem(
+                id=int(r.id),
+                sku_id=r.sku_id,
+                fingerprint=r.fingerprint,
+                provider=r.provider,
+                category=r.category,
+                country=r.country,
+                operator=r.operator,
+                product=r.product,
+                reuse=bool(r.reuse),
+                voice=bool(r.voice),
+                poll_interval_seconds=int(r.poll_interval_seconds),
+                success_count=int(r.success_count),
+                first_success_at=first_success_at.replace(tzinfo=dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+                last_success_at=last_success_at.replace(tzinfo=dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+            )
+        )
+    return out
+
+
 @router.get("/sku/{sku_id}/provider-config", response_model=AdminSkuProviderConfigResponse)
 def admin_get_sku_provider_config(sku_id: str, db: Session = Depends(_get_db)) -> AdminSkuProviderConfigResponse:
     row = db.execute(select(SkuProviderConfig).where(SkuProviderConfig.sku_id == sku_id).limit(1)).scalar_one_or_none()
@@ -162,6 +214,20 @@ def admin_upsert_sku_provider_config(
         row.reuse = payload.reuse
         row.voice = payload.voice
         row.poll_interval_seconds = payload.poll_interval_seconds
+
+    db.add(
+        SkuProviderConfigHistory(
+            sku_id=sku_id,
+            provider=payload.provider,
+            category=payload.category,
+            country=payload.country,
+            operator=payload.operator,
+            product=payload.product,
+            reuse=payload.reuse,
+            voice=payload.voice,
+            poll_interval_seconds=payload.poll_interval_seconds,
+        )
+    )
     db.commit()
     return AdminSkuProviderConfigResponse(
         sku_id=row.sku_id,
@@ -174,6 +240,40 @@ def admin_upsert_sku_provider_config(
         voice=bool(row.voice),
         poll_interval_seconds=int(row.poll_interval_seconds),
     )
+
+
+@router.get("/sku/{sku_id}/provider-config/history", response_model=List[AdminSkuProviderConfigHistoryItem])
+def admin_list_sku_provider_config_history(
+    sku_id: str,
+    limit: int = 20,
+    db: Session = Depends(_get_db),
+) -> List[AdminSkuProviderConfigHistoryItem]:
+    limit = max(1, min(int(limit), 200))
+    rows = db.execute(
+        select(SkuProviderConfigHistory)
+        .where(SkuProviderConfigHistory.sku_id == sku_id)
+        .order_by(SkuProviderConfigHistory.id.desc())
+        .limit(limit)
+    ).scalars().all()
+    out: List[AdminSkuProviderConfigHistoryItem] = []
+    for r in rows:
+        created_at: dt.datetime = r.created_at
+        out.append(
+            AdminSkuProviderConfigHistoryItem(
+                id=int(r.id),
+                sku_id=r.sku_id,
+                provider=r.provider,
+                category=r.category,
+                country=r.country,
+                operator=r.operator,
+                product=r.product,
+                reuse=bool(r.reuse),
+                voice=bool(r.voice),
+                poll_interval_seconds=int(r.poll_interval_seconds),
+                created_at=created_at.replace(tzinfo=dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+            )
+        )
+    return out
 
 
 @router.get("/vouchers/export/batch/{batch_id}", response_class=PlainTextResponse)
@@ -236,6 +336,7 @@ def admin_list_redeem_tasks(
                 "phone": getattr(st, "phone", None),
                 "order_id": getattr(st, "order_id", None),
                 "upstream_status": getattr(st, "upstream_status", None),
+                "expires_at": getattr(st, "expires_at", None).replace(tzinfo=dt.timezone.utc).isoformat().replace("+00:00", "Z") if getattr(st, "expires_at", None) is not None else None,
                 "last_error": getattr(st, "last_error", None),
                 "voucher_id": task.voucher_id,
                 "voucher_code": voucher_code,

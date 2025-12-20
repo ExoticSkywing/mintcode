@@ -1,16 +1,18 @@
 services:
   api:
     build: .
+    command: ["uvicorn", "mintcode_api.app:app", "--host", "0.0.0.0", "--port", "8123"]
     environment:
       ADMIN_API_KEY: ${ADMIN_API_KEY:-change-me}
       VOUCHER_SECRET: ${VOUCHER_SECRET:-change-me-too}
       DATABASE_URL: ${DATABASE_URL}
       REDEEM_PROCESS_MODE: external
+      REDEEM_WAIT_SECONDS: ${REDEEM_WAIT_SECONDS:-120}
       FIVESIM_API_KEY: ${FIVESIM_API_KEY:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "8123:8000"
+      - "8123:8123"
 
   worker:
     build: .
@@ -20,6 +22,7 @@ services:
       VOUCHER_SECRET: ${VOUCHER_SECRET:-change-me-too}
       DATABASE_URL: ${DATABASE_URL}
       REDEEM_PROCESS_MODE: external
+      REDEEM_WAIT_SECONDS: ${REDEEM_WAIT_SECONDS:-120}
       FIVESIM_API_KEY: ${FIVESIM_API_KEY:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"

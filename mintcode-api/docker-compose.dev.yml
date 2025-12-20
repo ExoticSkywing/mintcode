@@ -20,6 +20,7 @@ services:
       VOUCHER_SECRET: ${VOUCHER_SECRET:-change-me-too}
       DATABASE_URL: mysql+pymysql://root:password@mysql:3306/mintcode?charset=utf8mb4
       REDEEM_PROCESS_MODE: external
+      REDEEM_WAIT_SECONDS: ${REDEEM_WAIT_SECONDS:-120}
       FIVESIM_API_KEY: ${FIVESIM_API_KEY:-}
     depends_on:
       mysql:
@@ -35,6 +36,7 @@ services:
       VOUCHER_SECRET: ${VOUCHER_SECRET:-change-me-too}
       DATABASE_URL: mysql+pymysql://root:password@mysql:3306/mintcode?charset=utf8mb4
       REDEEM_PROCESS_MODE: external
+      REDEEM_WAIT_SECONDS: ${REDEEM_WAIT_SECONDS:-120}
       FIVESIM_API_KEY: ${FIVESIM_API_KEY:-}
     depends_on:
       mysql:

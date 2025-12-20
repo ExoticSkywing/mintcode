@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import os
 import re
+import socket
 import time
 from types import SimpleNamespace
 from typing import Optional
@@ -13,6 +15,9 @@ from sqlalchemy.orm import Session
 from mintcode_api.config import settings
 from mintcode_api.db import Base, SessionLocal, engine
 from mintcode_api.models import RedeemTask, RedeemTaskProviderState, SkuProviderConfig, SkuProviderConfigSuccess
+
+
+_WORKER_OWNER = os.environ.get("WORKER_ID") or f"{socket.gethostname()}:{os.getpid()}"
 
 
 def _process_one(task: RedeemTask, db: Session) -> None:
@@ -102,10 +107,25 @@ def _process_one(task: RedeemTask, db: Session) -> None:
                 row.total_success_cost = float(cost or 0)
 
     try:
+        def _release_with_status(new_status: str) -> None:
+            task.status = new_status
+            if hasattr(task, "processing_owner"):
+                task.processing_owner = None
+            if hasattr(task, "processing_until"):
+                task.processing_until = None
+
+        def _release_only() -> None:
+            if hasattr(task, "processing_owner"):
+                task.processing_owner = None
+            if hasattr(task, "processing_until"):
+                task.processing_until = None
+
         if task.status == "CANCELED":
+            _release_only()
             return
 
         if task.status == "DONE":
+            _release_only()
             return
 
         if task.result_code and st.order_id is not None and st.expires_at is not None and now >= st.expires_at:
@@ -113,18 +133,21 @@ def _process_one(task: RedeemTask, db: Session) -> None:
                 fs.user.order(OrderAction.FINISH, Order.from_order_id(int(st.order_id)))
             except Exception:
                 pass
-            task.status = "DONE"
+            _release_with_status("DONE")
             return
 
         if task.status == "CODE_READY":
             if st.order_id is None:
+                _release_only()
                 return
             if st.expires_at is not None and now >= st.expires_at:
                 try:
                     fs.user.order(OrderAction.FINISH, Order.from_order_id(int(st.order_id)))
                 except Exception:
                     pass
-                task.status = "DONE"
+                _release_with_status("DONE")
+            else:
+                _release_only()
             return
 
         if st.order_id is not None and task.status in ("PENDING", "PROCESSING", "WAITING_SMS"):
@@ -139,13 +162,32 @@ def _process_one(task: RedeemTask, db: Session) -> None:
                         fs.user.order(OrderAction.CANCEL, Order.from_order_id(int(st.order_id)))
                     except Exception:
                         pass
-                    task.status = "FAILED"
+                    _release_with_status("FAILED")
                     st.last_error = "expired"
                     return
             except Exception:
                 pass
 
         if st.order_id is None:
+            buy_attempts = int(getattr(st, "buy_attempts", 0) or 0)
+            max_buy_attempts = int(getattr(settings, "max_buy_attempts", 3) or 3)
+            if buy_attempts >= max_buy_attempts:
+                st.last_error = f"max_buy_attempts_exceeded={buy_attempts}"
+                _release_with_status("FAILED")
+                return
+
+            inflight_until = getattr(st, "buy_inflight_until", None)
+            if inflight_until is not None and now < inflight_until:
+                st.next_poll_at = now + dt.timedelta(seconds=1)
+                _release_with_status("WAITING_SMS")
+                return
+
+            st.buy_attempts = buy_attempts + 1
+            st.last_buy_attempt_at = now
+            st.buy_inflight_until = now + dt.timedelta(seconds=int(getattr(settings, "buy_inflight_seconds", 20) or 20))
+            db.flush()
+            db.commit()
+
             country = Country(cfg.country)
             op = (cfg.operator or "").strip().lower()
             try:
@@ -155,19 +197,19 @@ def _process_one(task: RedeemTask, db: Session) -> None:
                     operator = Operator.ANY_OPERATOR
                 elif not re.fullmatch(r"[a-z0-9]+", op):
                     st.last_error = "invalid_operator=" + str(cfg.operator)
-                    task.status = "FAILED"
+                    _release_with_status("FAILED")
                     return
                 else:
                     operator = SimpleNamespace(value=op)
             product_key = (cfg.product or "").strip().lower()
             if not product_key:
                 st.last_error = "invalid_product=" + str(cfg.product)
-                task.status = "FAILED"
+                _release_with_status("FAILED")
                 return
 
             if not re.fullmatch(r"[a-z0-9_-]+", product_key):
                 st.last_error = "invalid_product=" + str(cfg.product)
-                task.status = "FAILED"
+                _release_with_status("FAILED")
                 return
 
             # SDK enums may lag behind 5sim official product list. If enum conversion fails,
@@ -218,8 +260,11 @@ def _process_one(task: RedeemTask, db: Session) -> None:
             st.price = float(getattr(order, "price", 0) or 0)
             st.expires_at = getattr(order, "expires_at", None)
             st.next_poll_at = now + dt.timedelta(seconds=int(cfg.poll_interval_seconds))
+            st.buy_inflight_until = None
             st.last_error = None
-            task.status = "WAITING_SMS"
+            _release_with_status("WAITING_SMS")
+            db.flush()
+            db.commit()
             return
 
         order = Order.from_order_id(int(st.order_id))
@@ -245,25 +290,27 @@ def _process_one(task: RedeemTask, db: Session) -> None:
             already_had_code = bool(task.result_code)
             task.result_code = code
             task.status = "CODE_READY"
+            _release_only()
             if not already_had_code:
                 _collect_success_config(float(getattr(checked, "price", 0) or 0))
             return
 
         if checked.status in (Status.CANCELED, Status.TIMEOUT, Status.BANNED):
-            task.status = "FAILED"
+            _release_with_status("FAILED")
             st.last_error = "upstream_status=" + str(checked.status)
             return
 
         st.next_poll_at = now + dt.timedelta(seconds=int(cfg.poll_interval_seconds))
-        task.status = "WAITING_SMS"
+        _release_with_status("WAITING_SMS")
     except Exception as e:
         st.last_error = str(e)
         st.next_poll_at = now + dt.timedelta(seconds=max(5, int(getattr(cfg, "poll_interval_seconds", 5))))
-        task.status = "WAITING_SMS"
+        _release_with_status("WAITING_SMS")
 
 
 def _claim_next(db: Session) -> Optional[RedeemTask]:
     now = dt.datetime.utcnow()
+    lease_until = now + dt.timedelta(seconds=int(getattr(settings, "worker_lease_seconds", 30)))
     for _ in range(5):
         task_id = db.execute(
             select(RedeemTask.id)
@@ -271,6 +318,9 @@ def _claim_next(db: Session) -> Optional[RedeemTask]:
             .where(
                 or_(
                     RedeemTask.status.in_(["PENDING", "WAITING_SMS"]),
+                    (RedeemTask.status == "PROCESSING")
+                    & (RedeemTask.processing_until.is_not(None))
+                    & (RedeemTask.processing_until <= now),
                     (RedeemTask.status == "CODE_READY") & (RedeemTaskProviderState.expires_at.is_not(None)) & (RedeemTaskProviderState.expires_at <= now),
                 )
             )
@@ -284,8 +334,15 @@ def _claim_next(db: Session) -> Optional[RedeemTask]:
         res = db.execute(
             update(RedeemTask)
             .where(RedeemTask.id == task_id)
-            .where(RedeemTask.status.in_(["PENDING", "WAITING_SMS", "CODE_READY"]))
-            .values(status="PROCESSING")
+            .where(
+                or_(
+                    RedeemTask.status.in_(["PENDING", "WAITING_SMS", "CODE_READY"]),
+                    (RedeemTask.status == "PROCESSING")
+                    & (RedeemTask.processing_until.is_not(None))
+                    & (RedeemTask.processing_until <= now),
+                )
+            )
+            .values(status="PROCESSING", processing_owner=_WORKER_OWNER, processing_until=lease_until)
         )
         if getattr(res, "rowcount", 0) == 1:
             db.flush()
@@ -315,6 +372,10 @@ def run_loop(poll_seconds: float = 1.0) -> None:
                     t2 = db2.execute(select(RedeemTask).where(RedeemTask.id == task.id).limit(1)).scalar_one_or_none()
                     if t2 is not None and t2.status in ("PENDING", "PROCESSING"):
                         t2.status = "FAILED"
+                        if hasattr(t2, "processing_owner"):
+                            t2.processing_owner = None
+                        if hasattr(t2, "processing_until"):
+                            t2.processing_until = None
                         db2.commit()
                 finally:
                     db2.close()

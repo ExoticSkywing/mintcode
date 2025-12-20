@@ -13,6 +13,11 @@ class Settings(BaseSettings):
 
     db_auto_create_tables: bool = True
 
+    worker_lease_seconds: int = 30
+
+    buy_inflight_seconds: int = 20
+    max_buy_attempts: int = 3
+
     redeem_process_mode: str = "inline"
 
     redeem_wait_seconds: int = 120

@@ -46,6 +46,8 @@ class RedeemTask(Base):
     sku_id: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     result_code: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    processing_owner: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    processing_until: Mapped[Optional[dt.datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, nullable=False, default=lambda: dt.datetime.utcnow())
     updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime, nullable=False, default=lambda: dt.datetime.utcnow(), onupdate=lambda: dt.datetime.utcnow()
@@ -124,6 +126,9 @@ class RedeemTaskProviderState(Base):
     price: Mapped[Optional[float]] = mapped_column(Numeric(12, 4), nullable=True)
     expires_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime, nullable=True)
     next_poll_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime, nullable=True)
+    buy_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_buy_attempt_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime, nullable=True)
+    buy_inflight_until: Mapped[Optional[dt.datetime]] = mapped_column(DateTime, nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, nullable=False, default=lambda: dt.datetime.utcnow())
     updated_at: Mapped[dt.datetime] = mapped_column(

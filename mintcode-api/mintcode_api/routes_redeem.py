@@ -44,6 +44,7 @@ def _to_response(task: RedeemTask, st: Optional[RedeemTaskProviderState]) -> Red
         phone=getattr(st, "phone", None),
         order_id=getattr(st, "order_id", None),
         upstream_status=getattr(st, "upstream_status", None),
+        price=float(getattr(st, "price", 0) or 0) if getattr(st, "price", None) is not None else None,
         provider_started_at=started_at,
         expires_at=expires_at,
     )

@@ -136,6 +136,9 @@ def admin_list_sku_provider_config_successes(
     for r in rows:
         first_success_at: dt.datetime = r.first_success_at
         last_success_at: dt.datetime = r.last_success_at
+        total_cost = float(r.total_success_cost or 0)
+        sc = int(r.success_count or 0)
+        avg_cost = (total_cost / sc) if sc > 0 else 0.0
         out.append(
             AdminSkuProviderConfigSuccessItem(
                 id=int(r.id),
@@ -150,6 +153,8 @@ def admin_list_sku_provider_config_successes(
                 voice=bool(r.voice),
                 poll_interval_seconds=int(r.poll_interval_seconds),
                 success_count=int(r.success_count),
+                total_success_cost=total_cost,
+                avg_success_cost=avg_cost,
                 first_success_at=first_success_at.replace(tzinfo=dt.timezone.utc).isoformat().replace("+00:00", "Z"),
                 last_success_at=last_success_at.replace(tzinfo=dt.timezone.utc).isoformat().replace("+00:00", "Z"),
             )
@@ -336,6 +341,7 @@ def admin_list_redeem_tasks(
                 "phone": getattr(st, "phone", None),
                 "order_id": getattr(st, "order_id", None),
                 "upstream_status": getattr(st, "upstream_status", None),
+                "price": float(getattr(st, "price", 0) or 0) if getattr(st, "price", None) is not None else None,
                 "expires_at": getattr(st, "expires_at", None).replace(tzinfo=dt.timezone.utc).isoformat().replace("+00:00", "Z") if getattr(st, "expires_at", None) is not None else None,
                 "last_error": getattr(st, "last_error", None),
                 "voucher_id": task.voucher_id,

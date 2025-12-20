@@ -54,7 +54,7 @@ def _process_one(task: RedeemTask, db: Session) -> None:
 
     fs = FiveSim(api_key=settings.fivesim_api_key)
 
-    def _collect_success_config() -> None:
+    def _collect_success_config(cost: float) -> None:
         fp_src = "|".join(
             [
                 str(task.sku_id),
@@ -88,6 +88,7 @@ def _process_one(task: RedeemTask, db: Session) -> None:
                 voice=bool(cfg.voice),
                 poll_interval_seconds=int(cfg.poll_interval_seconds),
                 success_count=1,
+                total_success_cost=float(cost or 0),
                 first_success_at=now,
                 last_success_at=now,
             )
@@ -95,6 +96,10 @@ def _process_one(task: RedeemTask, db: Session) -> None:
         else:
             row.success_count = int(row.success_count) + 1
             row.last_success_at = now
+            try:
+                row.total_success_cost = float(row.total_success_cost or 0) + float(cost or 0)
+            except Exception:
+                row.total_success_cost = float(cost or 0)
 
     try:
         if task.status == "CANCELED":
@@ -210,6 +215,7 @@ def _process_one(task: RedeemTask, db: Session) -> None:
             st.order_id = int(order.id)
             st.phone = order.phone
             st.upstream_status = str(order.status)
+            st.price = float(getattr(order, "price", 0) or 0)
             st.expires_at = getattr(order, "expires_at", None)
             st.next_poll_at = now + dt.timedelta(seconds=int(cfg.poll_interval_seconds))
             st.last_error = None
@@ -219,6 +225,8 @@ def _process_one(task: RedeemTask, db: Session) -> None:
         order = Order.from_order_id(int(st.order_id))
         checked = fs.user.order(OrderAction.CHECK, order)
         st.upstream_status = str(checked.status)
+        if getattr(checked, "price", None) is not None:
+            st.price = float(getattr(checked, "price", 0) or 0)
         st.last_error = None
 
         sms_list = checked.sms or []
@@ -238,7 +246,7 @@ def _process_one(task: RedeemTask, db: Session) -> None:
             task.result_code = code
             task.status = "CODE_READY"
             if not already_had_code:
-                _collect_success_config()
+                _collect_success_config(float(getattr(checked, "price", 0) or 0))
             return
 
         if checked.status in (Status.CANCELED, Status.TIMEOUT, Status.BANNED):

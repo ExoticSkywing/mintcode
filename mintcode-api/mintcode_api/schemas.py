@@ -28,6 +28,7 @@ class RedeemTaskResponse(BaseModel):
     phone: Optional[str] = None
     order_id: Optional[int] = None
     upstream_status: Optional[str] = None
+    price: Optional[float] = None
     provider_started_at: Optional[str] = None
     expires_at: Optional[str] = None
 
@@ -86,5 +87,7 @@ class AdminSkuProviderConfigSuccessItem(BaseModel):
     voice: bool
     poll_interval_seconds: int
     success_count: int
+    total_success_cost: float
+    avg_success_cost: float
     first_success_at: str
     last_success_at: str

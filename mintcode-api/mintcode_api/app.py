@@ -179,6 +179,8 @@ def create_app() -> FastAPI:
           <thead>
             <tr>
               <th>Count</th>
+              <th>Avg Cost</th>
+              <th>Total Cost</th>
               <th>Last</th>
               <th>Country</th>
               <th>Operator</th>
@@ -239,6 +241,7 @@ def create_app() -> FastAPI:
               <th>Phone</th>
               <th>Order</th>
               <th>Upstream</th>
+              <th>Price</th>
               <th>Error</th>
               <th>Actions</th>
               <th>Voucher</th>
@@ -279,6 +282,8 @@ def create_app() -> FastAPI:
           const tr = document.createElement('tr');
           tr.innerHTML = `
             <td class="mono">${f.success_count}</td>
+            <td class="mono">${Number(f.avg_success_cost || 0).toFixed(4)}</td>
+            <td class="mono">${Number(f.total_success_cost || 0).toFixed(4)}</td>
             <td class="mono">${(f.last_success_at || '').replace('T', ' ').replace('Z', '')}</td>
             <td class="mono">${f.country}</td>
             <td class="mono">${f.operator}</td>
@@ -379,6 +384,7 @@ def create_app() -> FastAPI:
           const v = (t.voucher_code || '').slice(0, 12) + ((t.voucher_code || '').length > 12 ? '…' : '');
           const p = (t.phone || '').slice(0, 18) + ((t.phone || '').length > 18 ? '…' : '');
           const err = (t.last_error || '').slice(0, 20) + ((t.last_error || '').length > 20 ? '…' : '');
+          const price = (t.price === null || t.price === undefined) ? '' : Number(t.price).toFixed(4);
           tr.innerHTML = `
             <td class="mono">${t.id}</td>
             <td class="mono">${t.sku_id}</td>
@@ -387,10 +393,11 @@ def create_app() -> FastAPI:
             <td class="mono" title="${t.phone || ''}">${p}</td>
             <td class="mono">${t.order_id || ''}</td>
             <td class="mono">${t.upstream_status || ''}</td>
+            <td class="mono">${price}</td>
             <td class="mono" title="${t.last_error || ''}">${err}</td>
             <td class="mono actions"></td>
             <td class="mono" title="${t.voucher_code || ''}">${v}</td>
-            <td class="mono">${t.updated_at}</td>
+            <td class="mono">${(t.updated_at || '').replace('T', ' ').replace('Z', '')}</td>
           `;
 
           const actions = tr.querySelector('.actions');

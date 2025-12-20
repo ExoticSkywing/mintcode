@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from mintcode_api.db import Base
@@ -86,6 +86,7 @@ class SkuProviderConfigSuccess(Base):
     voice: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     poll_interval_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
     success_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_success_cost: Mapped[float] = mapped_column(Numeric(12, 4), nullable=False, default=0)
     first_success_at: Mapped[dt.datetime] = mapped_column(DateTime, nullable=False, default=lambda: dt.datetime.utcnow())
     last_success_at: Mapped[dt.datetime] = mapped_column(DateTime, nullable=False, default=lambda: dt.datetime.utcnow())
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, nullable=False, default=lambda: dt.datetime.utcnow())
@@ -120,6 +121,7 @@ class RedeemTaskProviderState(Base):
     order_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     phone: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     upstream_status: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    price: Mapped[Optional[float]] = mapped_column(Numeric(12, 4), nullable=True)
     expires_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime, nullable=True)
     next_poll_at: Mapped[Optional[dt.datetime]] = mapped_column(DateTime, nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

@@ -39,9 +39,11 @@ class RedeemTask(Base):
     __tablename__ = "redeem_tasks"
     __table_args__ = (
         UniqueConstraint("voucher_id", name="uq_redeem_tasks_voucher_id"),
+        UniqueConstraint("public_id", name="uq_redeem_tasks_public_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    public_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     voucher_id: Mapped[int] = mapped_column(Integer, ForeignKey("vouchers.id"), nullable=False)
     sku_id: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -52,6 +54,79 @@ class RedeemTask(Base):
     updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime, nullable=False, default=lambda: dt.datetime.utcnow(), onupdate=lambda: dt.datetime.utcnow()
     )
+
+
+class DeveloperKey(Base):
+    __tablename__ = "developer_keys"
+
+    dev_key_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    dev_key_secret: Mapped[str] = mapped_column(String(128), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, nullable=False, default=lambda: dt.datetime.utcnow())
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: dt.datetime.utcnow(), onupdate=lambda: dt.datetime.utcnow()
+    )
+
+
+class DeveloperNonce(Base):
+    __tablename__ = "developer_nonces"
+    __table_args__ = (
+        UniqueConstraint("dev_key_id", "ts", "nonce_sha256", name="uq_developer_nonces_key_ts_nonce"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    dev_key_id: Mapped[str] = mapped_column(String(64), ForeignKey("developer_keys.dev_key_id"), nullable=False)
+    ts: Mapped[int] = mapped_column(Integer, nullable=False)
+    nonce_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    nonce_raw: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, nullable=False, default=lambda: dt.datetime.utcnow())
+
+
+class DeveloperRateLimit(Base):
+    __tablename__ = "developer_rate_limits"
+    __table_args__ = (
+        UniqueConstraint("scope", "scope_id", "window_start_ts", name="uq_developer_rate_limits_scope_window"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    scope: Mapped[str] = mapped_column(String(32), nullable=False)
+    scope_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    window_start_ts: Mapped[int] = mapped_column(Integer, nullable=False)
+    count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, nullable=False, default=lambda: dt.datetime.utcnow())
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: dt.datetime.utcnow(), onupdate=lambda: dt.datetime.utcnow()
+    )
+
+
+class DeveloperIdempotencyKey(Base):
+    __tablename__ = "developer_idempotency_keys"
+    __table_args__ = (
+        UniqueConstraint("dev_key_id", "idempotency_key_sha256", name="uq_dev_idem_key"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    dev_key_id: Mapped[str] = mapped_column(String(64), ForeignKey("developer_keys.dev_key_id"), nullable=False)
+    idempotency_key_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    idempotency_key_raw: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    request_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    task_id: Mapped[int] = mapped_column(Integer, ForeignKey("redeem_tasks.id"), nullable=False)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, nullable=False, default=lambda: dt.datetime.utcnow())
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    actor_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    actor_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    ip: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    target_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    target_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    detail_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, nullable=False, default=lambda: dt.datetime.utcnow())
 
 
 class SkuProviderConfigHistory(Base):

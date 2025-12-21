@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import datetime as dt
+import secrets
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import func, insert, select
 from sqlalchemy.orm import Session
 
+from mintcode_api.audit import add_audit_log
 from mintcode_api.config import settings
 from mintcode_api.db import SessionLocal
 from mintcode_api.models import (
+    DeveloperKey,
     RedeemTask,
     RedeemTaskProviderState,
     SkuProviderConfig,
@@ -20,6 +23,9 @@ from mintcode_api.models import (
     VoucherBatch,
 )
 from mintcode_api.schemas import (
+    AdminCreateDevKeyRequest,
+    AdminCreateDevKeyResponse,
+    AdminDevKeyItem,
     AdminGenerateVouchersRequest,
     AdminSkuProviderConfigHistoryItem,
     AdminSkuProviderConfigResponse,
@@ -41,8 +47,124 @@ def _get_db() -> Session:
         db.close()
 
 
+@router.post("/dev-keys", response_model=AdminCreateDevKeyResponse)
+def admin_create_dev_key(
+    payload: AdminCreateDevKeyRequest,
+    request: Request,
+    db: Session = Depends(_get_db),
+) -> AdminCreateDevKeyResponse:
+    dev_key_id = "dk_" + secrets.token_urlsafe(12)
+    dev_key_secret = secrets.token_urlsafe(32)
+    now = dt.datetime.utcnow()
+
+    row = DeveloperKey(
+        dev_key_id=dev_key_id,
+        dev_key_secret=dev_key_secret,
+        enabled=True,
+        name=payload.name,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(row)
+
+    ip = getattr(getattr(request, "client", None), "host", None)
+    add_audit_log(
+        db,
+        actor_type="AdminKey",
+        actor_id="admin",
+        ip=ip,
+        action="admin.dev_key.create",
+        target_type="DeveloperKey",
+        target_id=dev_key_id,
+        detail={"name": payload.name or ""},
+    )
+    db.commit()
+
+    return AdminCreateDevKeyResponse(
+        dev_key_id=row.dev_key_id,
+        dev_key_secret=dev_key_secret,
+        enabled=bool(row.enabled),
+        name=row.name,
+        created_at=now.replace(tzinfo=dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+    )
+
+
+@router.get("/dev-keys", response_model=List[AdminDevKeyItem])
+def admin_list_dev_keys(limit: int = 100, db: Session = Depends(_get_db)) -> List[AdminDevKeyItem]:
+    limit = max(1, min(int(limit), 200))
+    rows = db.execute(select(DeveloperKey).order_by(DeveloperKey.created_at.desc()).limit(limit)).scalars().all()
+    out: List[AdminDevKeyItem] = []
+    for r in rows:
+        out.append(
+            AdminDevKeyItem(
+                dev_key_id=r.dev_key_id,
+                enabled=bool(r.enabled),
+                name=r.name,
+                created_at=r.created_at.replace(tzinfo=dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+                updated_at=r.updated_at.replace(tzinfo=dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+            )
+        )
+    return out
+
+
+@router.post("/dev-keys/{dev_key_id}/enable", response_model=AdminDevKeyItem)
+def admin_enable_dev_key(dev_key_id: str, request: Request, db: Session = Depends(_get_db)) -> AdminDevKeyItem:
+    row = db.execute(select(DeveloperKey).where(DeveloperKey.dev_key_id == dev_key_id).limit(1)).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="dev_key_not_found")
+    row.enabled = True
+
+    ip = getattr(getattr(request, "client", None), "host", None)
+    add_audit_log(
+        db,
+        actor_type="AdminKey",
+        actor_id="admin",
+        ip=ip,
+        action="admin.dev_key.enable",
+        target_type="DeveloperKey",
+        target_id=dev_key_id,
+        detail=None,
+    )
+    db.commit()
+    return AdminDevKeyItem(
+        dev_key_id=row.dev_key_id,
+        enabled=bool(row.enabled),
+        name=row.name,
+        created_at=row.created_at.replace(tzinfo=dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+        updated_at=row.updated_at.replace(tzinfo=dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+    )
+
+
+@router.post("/dev-keys/{dev_key_id}/disable", response_model=AdminDevKeyItem)
+def admin_disable_dev_key(dev_key_id: str, request: Request, db: Session = Depends(_get_db)) -> AdminDevKeyItem:
+    row = db.execute(select(DeveloperKey).where(DeveloperKey.dev_key_id == dev_key_id).limit(1)).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="dev_key_not_found")
+    row.enabled = False
+
+    ip = getattr(getattr(request, "client", None), "host", None)
+    add_audit_log(
+        db,
+        actor_type="AdminKey",
+        actor_id="admin",
+        ip=ip,
+        action="admin.dev_key.disable",
+        target_type="DeveloperKey",
+        target_id=dev_key_id,
+        detail=None,
+    )
+    db.commit()
+    return AdminDevKeyItem(
+        dev_key_id=row.dev_key_id,
+        enabled=bool(row.enabled),
+        name=row.name,
+        created_at=row.created_at.replace(tzinfo=dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+        updated_at=row.updated_at.replace(tzinfo=dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+    )
+
+
 @router.post("/vouchers/generate", response_class=PlainTextResponse)
-def admin_generate_vouchers(payload: AdminGenerateVouchersRequest, db: Session = Depends(_get_db)) -> str:
+def admin_generate_vouchers(payload: AdminGenerateVouchersRequest, request: Request, db: Session = Depends(_get_db)) -> str:
     sku_id = payload.sku_id or payload.label or "default"
 
     batch = VoucherBatch(sku_id=sku_id, count=payload.count)
@@ -82,6 +204,24 @@ def admin_generate_vouchers(payload: AdminGenerateVouchersRequest, db: Session =
             db.execute(select(func.count()).select_from(Voucher).where(Voucher.batch_id == batch.id)).scalar_one()
         )
 
+    ip = getattr(getattr(request, "client", None), "host", None)
+    add_audit_log(
+        db,
+        actor_type="AdminKey",
+        actor_id="admin",
+        ip=ip,
+        action="admin.vouchers.generate",
+        target_type="VoucherBatch",
+        target_id=str(batch.id),
+        detail={
+            "sku_id": sku_id,
+            "count": int(payload.count),
+            "length": int(payload.length),
+            "label": payload.label,
+            "label_length": int(payload.label_length),
+            "label_pos": int(payload.label_pos),
+        },
+    )
     db.commit()
 
     # 回查该 batch 的最终 code，确保返回精确数量且都是落库成功的
@@ -194,6 +334,7 @@ def admin_get_sku_provider_config(sku_id: str, db: Session = Depends(_get_db)) -
 def admin_upsert_sku_provider_config(
     sku_id: str,
     payload: AdminSkuProviderConfigUpsertRequest,
+    request: Request,
     db: Session = Depends(_get_db),
 ) -> AdminSkuProviderConfigResponse:
     row = db.execute(select(SkuProviderConfig).where(SkuProviderConfig.sku_id == sku_id).limit(1)).scalar_one_or_none()
@@ -232,6 +373,27 @@ def admin_upsert_sku_provider_config(
             voice=payload.voice,
             poll_interval_seconds=payload.poll_interval_seconds,
         )
+    )
+
+    ip = getattr(getattr(request, "client", None), "host", None)
+    add_audit_log(
+        db,
+        actor_type="AdminKey",
+        actor_id="admin",
+        ip=ip,
+        action="admin.sku_provider_config.upsert",
+        target_type="SkuProviderConfig",
+        target_id=sku_id,
+        detail={
+            "provider": payload.provider,
+            "category": payload.category,
+            "country": payload.country,
+            "operator": payload.operator,
+            "product": payload.product,
+            "reuse": bool(payload.reuse),
+            "voice": bool(payload.voice),
+            "poll_interval_seconds": int(payload.poll_interval_seconds),
+        },
     )
     db.commit()
     return AdminSkuProviderConfigResponse(

@@ -37,6 +37,41 @@ class RedeemTaskActionRequest(BaseModel):
     code: str = Field(min_length=6, max_length=128)
 
 
+class DevRedeemCreateRequest(BaseModel):
+    voucher: str = Field(min_length=6, max_length=128)
+
+
+class DevRedeemTaskResponse(BaseModel):
+    task_id: str
+    status: str
+    phone: Optional[str] = None
+    expires_at: Optional[str] = None
+    code: Optional[str] = None
+    final: Optional[bool] = None
+    voucher_consumed: Optional[bool] = None
+    retry_after_seconds: Optional[int] = None
+
+
+class AdminCreateDevKeyResponse(BaseModel):
+    dev_key_id: str
+    dev_key_secret: str
+    enabled: bool
+    name: Optional[str] = None
+    created_at: str
+
+
+class AdminCreateDevKeyRequest(BaseModel):
+    name: Optional[str] = Field(default=None, max_length=128)
+
+
+class AdminDevKeyItem(BaseModel):
+    dev_key_id: str
+    enabled: bool
+    name: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+
 class AdminSkuProviderConfigUpsertRequest(BaseModel):
     provider: str = Field(default="fivesim", max_length=32)
     category: str = Field(default="activation", max_length=16)

@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse
 from mintcode_api.config import settings
 from mintcode_api.db import Base, engine
 from mintcode_api.routes_admin import router as admin_router
+from mintcode_api.routes_dev import router as dev_router
 from mintcode_api.routes_health import router as health_router
 from mintcode_api.routes_redeem import router as redeem_router
 
@@ -748,6 +749,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(admin_router)
+    app.include_router(dev_router)
     app.include_router(redeem_router)
     return app
 

@@ -34,6 +34,10 @@ Open:
 All admin endpoints require header:
 - `X-Admin-Key: <ADMIN_API_KEY>`
 
+## Developer API
+
+See: `DEVELOPER_API.md`
+
 ### Generate vouchers
 
 `POST /admin/vouchers/generate`

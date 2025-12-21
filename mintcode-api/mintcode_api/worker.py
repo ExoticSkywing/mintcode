@@ -188,6 +188,9 @@ def _process_one(task: RedeemTask, db: Session) -> None:
             db.flush()
             db.commit()
 
+            if os.environ.get("WORKER_CRASH_AFTER_BUY_GUARD_COMMIT") == "1":
+                os._exit(99)
+
             country = Country(cfg.country)
             op = (cfg.operator or "").strip().lower()
             try:

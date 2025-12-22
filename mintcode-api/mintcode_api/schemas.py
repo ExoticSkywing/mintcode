@@ -29,6 +29,7 @@ class RedeemTaskResponse(BaseModel):
     order_id: Optional[int] = None
     upstream_status: Optional[str] = None
     price: Optional[float] = None
+    country: Optional[str] = None
     provider_started_at: Optional[str] = None
     expires_at: Optional[str] = None
 

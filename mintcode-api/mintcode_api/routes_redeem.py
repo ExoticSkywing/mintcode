@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from mintcode_api.config import settings
 from mintcode_api.db import SessionLocal
-from mintcode_api.models import RedeemTask, RedeemTaskProviderState, Voucher
+from mintcode_api.models import RedeemTask, RedeemTaskProviderState, SkuProviderConfig, Voucher
 from mintcode_api.schemas import RedeemCreateRequest, RedeemTaskActionRequest, RedeemTaskResponse
 
 
@@ -29,13 +29,20 @@ def _generate_mock_code() -> str:
     return str(secrets.randbelow(1_000_000)).zfill(6)
 
 
-def _to_response(task: RedeemTask, st: Optional[RedeemTaskProviderState]) -> RedeemTaskResponse:
+def _to_response(task: RedeemTask, st: Optional[RedeemTaskProviderState], db: Session) -> RedeemTaskResponse:
     started_at = None
     if st is not None and getattr(st, "created_at", None) is not None:
         started_at = st.created_at.replace(tzinfo=None).isoformat() + "Z"
     expires_at = None
     if st is not None and getattr(st, "expires_at", None) is not None:
         expires_at = st.expires_at.replace(tzinfo=None).isoformat() + "Z"
+    
+    country = None
+    if task.sku_id:
+        cfg = db.execute(select(SkuProviderConfig).where(SkuProviderConfig.sku_id == task.sku_id).limit(1)).scalar_one_or_none()
+        if cfg:
+            country = cfg.country
+
     return RedeemTaskResponse(
         task_id=task.id,
         sku_id=task.sku_id,
@@ -45,6 +52,7 @@ def _to_response(task: RedeemTask, st: Optional[RedeemTaskProviderState]) -> Red
         order_id=getattr(st, "order_id", None),
         upstream_status=getattr(st, "upstream_status", None),
         price=float(getattr(st, "price", 0) or 0) if getattr(st, "price", None) is not None else None,
+        country=country,
         provider_started_at=started_at,
         expires_at=expires_at,
     )
@@ -97,14 +105,14 @@ def redeem_create(
             db.commit()
             if settings.redeem_process_mode == "inline":
                 background_tasks.add_task(_process_task, existing.id)
-            return _to_response(existing, new_st)
+            return _to_response(existing, new_st, db)
 
         if settings.redeem_process_mode == "inline" and existing.status in ("PENDING", "PROCESSING"):
             background_tasks.add_task(_process_task, existing.id)
         st = db.execute(
             select(RedeemTaskProviderState).where(RedeemTaskProviderState.task_id == existing.id).limit(1)
         ).scalar_one_or_none()
-        return _to_response(existing, st)
+        return _to_response(existing, st, db)
 
     task = RedeemTask(
         voucher_id=voucher.id,
@@ -125,13 +133,13 @@ def redeem_create(
         st = db.execute(
             select(RedeemTaskProviderState).where(RedeemTaskProviderState.task_id == existing.id).limit(1)
         ).scalar_one_or_none()
-        return _to_response(existing, st)
+        return _to_response(existing, st, db)
 
     db.refresh(task)
     if settings.redeem_process_mode == "inline":
         background_tasks.add_task(_process_task, task.id)
     st = db.execute(select(RedeemTaskProviderState).where(RedeemTaskProviderState.task_id == task.id).limit(1)).scalar_one_or_none()
-    return _to_response(task, st)
+    return _to_response(task, st, db)
 
 
 @router.get("/redeem/{task_id}", response_model=RedeemTaskResponse)
@@ -141,7 +149,7 @@ def redeem_get(task_id: int, db: Session = Depends(_get_db)) -> RedeemTaskRespon
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not_found")
 
     st = db.execute(select(RedeemTaskProviderState).where(RedeemTaskProviderState.task_id == task.id).limit(1)).scalar_one_or_none()
-    return _to_response(task, st)
+    return _to_response(task, st, db)
 
 
 @router.post("/redeem/{task_id}/cancel", response_model=RedeemTaskResponse)
@@ -168,7 +176,7 @@ def redeem_cancel(task_id: int, payload: RedeemTaskActionRequest, db: Session = 
     if st is not None:
         st.last_error = "user_canceled"
     db.commit()
-    return _to_response(task, st)
+    return _to_response(task, st, db)
 
 
 @router.post("/redeem/{task_id}/next", response_model=RedeemTaskResponse)
@@ -194,7 +202,7 @@ def redeem_next(task_id: int, payload: RedeemTaskActionRequest, db: Session = De
     task.status = "PENDING"
     task.result_code = None
     db.commit()
-    return _to_response(task, new_st)
+    return _to_response(task, new_st, db)
 
 
 @router.post("/redeem/{task_id}/complete", response_model=RedeemTaskResponse)
@@ -222,4 +230,4 @@ def redeem_complete(task_id: int, payload: RedeemTaskActionRequest, db: Session 
 
     task.status = "DONE"
     db.commit()
-    return _to_response(task, st)
+    return _to_response(task, st, db)

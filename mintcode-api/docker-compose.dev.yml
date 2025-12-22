@@ -6,6 +6,8 @@ services:
       MYSQL_DATABASE: mintcode
     ports:
       - "3307:3306"
+    volumes:
+      - db_data:/var/lib/mysql
     command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-ppassword"]
@@ -56,3 +58,6 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+
+volumes:
+  db_data:

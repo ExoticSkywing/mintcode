@@ -742,6 +742,837 @@ def create_app() -> FastAPI:
 </html>"""
         return html.replace("__REDEEM_WAIT_SECONDS__", str(int(settings.redeem_wait_seconds)))
 
+    @app.get("/redeem-ui", response_class=HTMLResponse)
+    def redeem_ui() -> str:
+        redeem_html = """<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>MintCode 兑换</title>
+  <style>
+    :root {
+      --primary: #6366f1;
+      --primary-hover: #4f46e5;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --radius: 12px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f172a;
+        --card-bg: #1e293b;
+        --text: #f1f5f9;
+        --text-muted: #94a3b8;
+        --border: #334155;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 24px 16px;
+    }
+    .container {
+      width: 100%;
+      max-width: 420px;
+    }
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -2px rgba(0,0,0,.1);
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+    .logo {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .logo h1 {
+      font-size: 24px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--primary), #a855f7);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .logo p {
+      color: var(--text-muted);
+      font-size: 14px;
+      margin-top: 4px;
+    }
+    .input-group {
+      margin-bottom: 16px;
+    }
+    .input-group label {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 8px;
+      color: var(--text);
+    }
+    .input-group input {
+      width: 100%;
+      padding: 12px 16px;
+      font-size: 16px;
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
+      color: var(--text);
+      transition: border-color .2s, box-shadow .2s;
+      outline: none;
+    }
+    .input-group input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(99,102,241,.15);
+    }
+    .input-group input::placeholder {
+      color: var(--text-muted);
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 24px;
+      font-size: 16px;
+      font-weight: 600;
+      border: none;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: all .2s;
+      width: 100%;
+    }
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+    }
+    .btn-primary:disabled {
+      opacity: .6;
+      cursor: not-allowed;
+    }
+    .btn-outline {
+      background: transparent;
+      border: 2px solid var(--border);
+      color: var(--text);
+    }
+    .btn-outline:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+    .btn-danger {
+      background: var(--danger);
+      color: white;
+    }
+    .btn-danger:hover {
+      background: #dc2626;
+    }
+    .btn-success {
+      background: var(--success);
+      color: white;
+    }
+    .btn-success:hover {
+      background: #059669;
+    }
+    .btn-sm {
+      padding: 8px 16px;
+      font-size: 14px;
+    }
+    .status-card {
+      display: none;
+    }
+    .status-card.active {
+      display: block;
+    }
+    .steps {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      position: relative;
+    }
+    .steps::before {
+      content: '';
+      position: absolute;
+      top: 16px;
+      left: 24px;
+      right: 24px;
+      height: 2px;
+      background: var(--border);
+      z-index: 0;
+    }
+    .step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      z-index: 1;
+      flex: 1;
+    }
+    .step-dot {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-muted);
+      transition: all .3s;
+    }
+    .step.active .step-dot {
+      background: var(--primary);
+      color: white;
+      box-shadow: 0 0 0 4px rgba(99,102,241,.2);
+    }
+    .step.done .step-dot {
+      background: var(--success);
+      color: white;
+    }
+    .step.error .step-dot {
+      background: var(--danger);
+      color: white;
+    }
+    .step-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 8px;
+      text-align: center;
+    }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .info-row:last-child {
+      border-bottom: none;
+    }
+    .info-label {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+    .info-value {
+      font-size: 14px;
+      font-weight: 500;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .copy-btn {
+      padding: 4px 8px;
+      font-size: 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text-muted);
+      transition: all .2s;
+    }
+    .copy-btn:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+    .copy-btn.copied {
+      background: var(--success);
+      border-color: var(--success);
+      color: white;
+    }
+    .code-display {
+      background: linear-gradient(135deg, var(--primary), #a855f7);
+      color: white;
+      padding: 20px;
+      border-radius: var(--radius);
+      text-align: center;
+      margin: 16px 0;
+    }
+    .code-display .label {
+      font-size: 12px;
+      opacity: .8;
+      margin-bottom: 8px;
+    }
+    .code-display .code {
+      font-size: 32px;
+      font-weight: 700;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      letter-spacing: 4px;
+    }
+    .timer {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: var(--bg);
+      border-radius: 20px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .timer.warning {
+      background: rgba(245,158,11,.1);
+      color: var(--warning);
+    }
+    .timer.danger {
+      background: rgba(239,68,68,.1);
+      color: var(--danger);
+    }
+    .status-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .status-badge.pending { background: rgba(99,102,241,.1); color: var(--primary); }
+    .status-badge.processing { background: rgba(245,158,11,.1); color: var(--warning); }
+    .status-badge.waiting { background: rgba(59,130,246,.1); color: #3b82f6; }
+    .status-badge.ready { background: rgba(16,185,129,.1); color: var(--success); }
+    .status-badge.done { background: rgba(16,185,129,.1); color: var(--success); }
+    .status-badge.failed { background: rgba(239,68,68,.1); color: var(--danger); }
+    .status-badge.canceled { background: rgba(107,114,128,.1); color: #6b7280; }
+    .actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .actions .btn {
+      flex: 1;
+    }
+    .error-msg {
+      background: rgba(239,68,68,.1);
+      color: var(--danger);
+      padding: 12px 16px;
+      border-radius: var(--radius);
+      font-size: 14px;
+      margin-top: 16px;
+      display: none;
+    }
+    .error-msg.show {
+      display: block;
+    }
+    .hint {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-align: center;
+      margin-top: 16px;
+      line-height: 1.6;
+    }
+    .phone-highlight {
+      background: #f8fafc;
+      border: 2px dashed var(--primary);
+      padding: 24px;
+      border-radius: var(--radius);
+      text-align: center;
+      margin: 24px 0;
+      position: relative;
+    }
+    .phone-highlight .label {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .phone-highlight .phone {
+      font-size: 36px;
+      font-weight: 800;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      color: var(--primary);
+      text-shadow: 0 2px 0 rgba(0,0,0,0.05);
+      letter-spacing: 1px;
+      margin-bottom: 16px;
+    }
+    .phone-highlight .copy-btn {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: 0 2px 4px rgba(99,102,241,0.2);
+    }
+    .phone-highlight .copy-btn:hover {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+    }
+    .phone-highlight .copy-btn.copied {
+      background: var(--success);
+    }
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(255,255,255,.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .fade-in {
+      animation: fadeIn .3s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">
+      <h1>MintCode</h1>
+      <p>短信验证码兑换服务</p>
+    </div>
+
+    <!-- 输入卡片 -->
+    <div class="card" id="inputCard">
+      <div class="input-group">
+        <label for="voucher">兑换码</label>
+        <input type="text" id="voucher" placeholder="请输入您的兑换码" autocomplete="off" spellcheck="false" />
+      </div>
+      <button class="btn btn-primary" id="startBtn" onclick="startRedeem()">
+        开始兑换
+      </button>
+      <div class="error-msg" id="inputError"></div>
+    </div>
+
+    <!-- 状态卡片 -->
+    <div class="card status-card" id="statusCard">
+      <div class="steps">
+        <div class="step" id="step1">
+          <div class="step-dot">1</div>
+          <div class="step-label">提交</div>
+        </div>
+        <div class="step" id="step2">
+          <div class="step-dot">2</div>
+          <div class="step-label">获取号码</div>
+        </div>
+        <div class="step" id="step3">
+          <div class="step-dot">3</div>
+          <div class="step-label">等待短信</div>
+        </div>
+        <div class="step" id="step4">
+          <div class="step-dot">4</div>
+          <div class="step-label">完成</div>
+        </div>
+      </div>
+
+      <div class="info-row">
+        <span class="info-label">状态</span>
+        <span class="status-badge pending" id="statusBadge">处理中</span>
+      </div>
+
+      <div class="phone-highlight" id="phoneSection" style="display:none;">
+        <div class="label">请使用此号码在目标平台触发短信</div>
+        <div class="phone" id="phoneDisplay">-</div>
+        <button class="copy-btn" style="margin-top:12px;" onclick="copyText('phoneDisplay', this)">复制号码</button>
+      </div>
+
+      <div class="code-display" id="codeSection" style="display:none;">
+        <div class="label">验证码已到达</div>
+        <div class="code" id="codeDisplay">-</div>
+        <button class="copy-btn" style="margin-top:12px;background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.3);color:white;" onclick="copyText('codeDisplay', this)">复制验证码</button>
+      </div>
+
+      <div class="info-row" id="timerRow" style="display:none;">
+        <span class="info-label">剩余时间</span>
+        <span class="timer" id="timerDisplay">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          <span id="timerValue">--:--</span>
+        </span>
+      </div>
+
+      <div class="info-row" id="countryRow" style="display:none;">
+        <span class="info-label">国家/地区</span>
+        <span class="info-value" id="countryDisplay">-</span>
+      </div>
+
+      <div class="error-msg" id="statusError"></div>
+
+      <div class="actions" id="actions"></div>
+
+      <div class="hint" id="hintText"></div>
+    </div>
+
+    <!-- 新兑换按钮 -->
+    <div id="newRedeemSection" style="display:none;">
+      <button class="btn btn-outline" onclick="resetUI()">兑换新的验证码</button>
+    </div>
+  </div>
+
+  <script>
+    const redeemWaitSeconds = __REDEEM_WAIT_SECONDS__;
+    let currentTaskId = null;
+    let currentVoucher = '';
+    let pollTimer = null;
+    let countdownTimer = null;
+    let expiresAt = null;
+    let providerStartedAt = null;
+
+    function formatCountry(raw) {
+      if (!raw) return '';
+      const key = String(raw).trim().toLowerCase();
+      const map = {
+        'england': { flag: '🇬🇧', en: 'England', zh: '英国' },
+        'united kingdom': { flag: '🇬🇧', en: 'United Kingdom', zh: '英国' },
+        'great britain': { flag: '🇬🇧', en: 'Great Britain', zh: '英国' },
+        'usa': { flag: '🇺🇸', en: 'United States', zh: '美国' },
+        'united states': { flag: '🇺🇸', en: 'United States', zh: '美国' },
+        'russia': { flag: '🇷🇺', en: 'Russia', zh: '俄罗斯' },
+        'ukraine': { flag: '🇺🇦', en: 'Ukraine', zh: '乌克兰' },
+        'france': { flag: '🇫🇷', en: 'France', zh: '法国' },
+        'germany': { flag: '🇩🇪', en: 'Germany', zh: '德国' },
+        'italy': { flag: '🇮🇹', en: 'Italy', zh: '意大利' },
+        'spain': { flag: '🇪🇸', en: 'Spain', zh: '西班牙' },
+        'poland': { flag: '🇵🇱', en: 'Poland', zh: '波兰' },
+        'netherlands': { flag: '🇳🇱', en: 'Netherlands', zh: '荷兰' },
+        'sweden': { flag: '🇸🇪', en: 'Sweden', zh: '瑞典' },
+        'norway': { flag: '🇳🇴', en: 'Norway', zh: '挪威' },
+        'finland': { flag: '🇫🇮', en: 'Finland', zh: '芬兰' },
+        'denmark': { flag: '🇩🇰', en: 'Denmark', zh: '丹麦' },
+        'australia': { flag: '🇦🇺', en: 'Australia', zh: '澳大利亚' },
+        'canada': { flag: '🇨🇦', en: 'Canada', zh: '加拿大' },
+        'japan': { flag: '🇯🇵', en: 'Japan', zh: '日本' },
+        'korea': { flag: '🇰🇷', en: 'Korea', zh: '韩国' },
+        'south korea': { flag: '🇰🇷', en: 'South Korea', zh: '韩国' },
+        'hong kong': { flag: '🇭🇰', en: 'Hong Kong', zh: '中国香港' },
+        'taiwan': { flag: '🇹🇼', en: 'Taiwan', zh: '中国台湾' },
+        'china': { flag: '🇨🇳', en: 'China', zh: '中国' },
+        'singapore': { flag: '🇸🇬', en: 'Singapore', zh: '新加坡' },
+        'india': { flag: '🇮🇳', en: 'India', zh: '印度' },
+        'brazil': { flag: '🇧🇷', en: 'Brazil', zh: '巴西' },
+        'mexico': { flag: '🇲🇽', en: 'Mexico', zh: '墨西哥' },
+        'turkey': { flag: '🇹🇷', en: 'Turkey', zh: '土耳其' },
+        'israel': { flag: '🇮🇱', en: 'Israel', zh: '以色列' },
+      };
+      const v = map[key];
+      if (!v) return String(raw);
+      const parts = [v.flag, v.en, v.zh].filter(Boolean);
+      return parts.join(' ');
+    }
+
+    function showError(elementId, msg) {
+      const el = document.getElementById(elementId);
+      el.textContent = msg;
+      el.classList.add('show');
+    }
+
+    function hideError(elementId) {
+      document.getElementById(elementId).classList.remove('show');
+    }
+
+    function copyText(elementId, btn) {
+      const text = document.getElementById(elementId).textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = '已复制';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = elementId === 'codeDisplay' ? '复制验证码' : '复制号码';
+          btn.classList.remove('copied');
+        }, 2000);
+      });
+    }
+
+    function updateSteps(step, error = false) {
+      for (let i = 1; i <= 4; i++) {
+        const el = document.getElementById('step' + i);
+        el.classList.remove('active', 'done', 'error');
+        if (error && i === step) {
+          el.classList.add('error');
+        } else if (i < step) {
+          el.classList.add('done');
+        } else if (i === step) {
+          el.classList.add('active');
+        }
+      }
+    }
+
+    function updateStatusBadge(status) {
+      const badge = document.getElementById('statusBadge');
+      badge.className = 'status-badge';
+      const map = {
+        'PENDING': ['pending', '排队中'],
+        'PROCESSING': ['processing', '处理中'],
+        'WAITING_SMS': ['waiting', '等待短信'],
+        'CODE_READY': ['ready', '验证码已到达'],
+        'DONE': ['done', '已完成'],
+        'FAILED': ['failed', '失败'],
+        'CANCELED': ['canceled', '已取消']
+      };
+      const [cls, text] = map[status] || ['pending', status];
+      badge.classList.add(cls);
+      badge.textContent = text;
+    }
+
+    function updateTimer() {
+      let remaining = null;
+      if (expiresAt) {
+        remaining = Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000));
+      } else if (providerStartedAt) {
+        const elapsed = Math.floor((Date.now() - new Date(providerStartedAt).getTime()) / 1000);
+        remaining = Math.max(0, redeemWaitSeconds - elapsed);
+      }
+
+      if (remaining !== null) {
+        document.getElementById('timerRow').style.display = 'flex';
+        const mins = Math.floor(remaining / 60);
+        const secs = remaining % 60;
+        document.getElementById('timerValue').textContent = mins + ':' + String(secs).padStart(2, '0');
+
+        const timerEl = document.getElementById('timerDisplay');
+        timerEl.classList.remove('warning', 'danger');
+        if (remaining < 30) {
+          timerEl.classList.add('danger');
+        } else if (remaining < 60) {
+          timerEl.classList.add('warning');
+        }
+      } else {
+        document.getElementById('timerRow').style.display = 'none';
+      }
+    }
+
+    function renderActions(status) {
+      const container = document.getElementById('actions');
+      container.innerHTML = '';
+
+      if (['PENDING', 'PROCESSING', 'WAITING_SMS'].includes(status)) {
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'btn btn-outline btn-sm';
+        cancelBtn.textContent = '取消';
+        cancelBtn.onclick = () => doAction('cancel');
+        container.appendChild(cancelBtn);
+      }
+
+      if (status === 'CODE_READY') {
+        const completeBtn = document.createElement('button');
+        completeBtn.className = 'btn btn-success btn-sm';
+        completeBtn.textContent = '确认完成';
+        completeBtn.onclick = () => doAction('complete');
+        container.appendChild(completeBtn);
+      }
+
+      if (['CANCELED', 'FAILED'].includes(status)) {
+        const nextBtn = document.createElement('button');
+        nextBtn.className = 'btn btn-primary btn-sm';
+        nextBtn.textContent = '重新获取号码';
+        nextBtn.onclick = () => doAction('next');
+        container.appendChild(nextBtn);
+      }
+    }
+
+    function updateHint(status) {
+      const hint = document.getElementById('hintText');
+      const hints = {
+        'PENDING': '正在为您分配手机号码，请稍候...',
+        'PROCESSING': '正在处理中，请稍候...',
+        'WAITING_SMS': '请在目标平台使用上方号码触发短信验证',
+        'CODE_READY': '请尽快使用验证码，过期后将自动完成',
+        'DONE': '兑换已完成',
+        'FAILED': '兑换失败，您可以重新获取号码再试',
+        'CANCELED': '已取消，您可以重新获取号码'
+      };
+      hint.textContent = hints[status] || '';
+    }
+
+    async function startRedeem() {
+      const voucher = document.getElementById('voucher').value.trim();
+      if (!voucher) {
+        showError('inputError', '请输入兑换码');
+        return;
+      }
+      hideError('inputError');
+      currentVoucher = voucher;
+
+      const btn = document.getElementById('startBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<div class="spinner"></div> 处理中...';
+
+      try {
+        const res = await fetch('/redeem', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: voucher })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          const msg = data.detail === 'invalid_code' ? '兑换码无效' : (data.detail || '请求失败');
+          showError('inputError', msg);
+          btn.disabled = false;
+          btn.innerHTML = '开始兑换';
+          return;
+        }
+
+        currentTaskId = data.task_id;
+        expiresAt = data.expires_at;
+        providerStartedAt = data.provider_started_at;
+        document.getElementById('inputCard').style.display = 'none';
+        document.getElementById('statusCard').classList.add('active');
+        document.getElementById('statusCard').classList.add('fade-in');
+        updateUI(data);
+        startPolling();
+      } catch (e) {
+        showError('inputError', '网络错误，请重试');
+        btn.disabled = false;
+        btn.innerHTML = '开始兑换';
+      }
+    }
+
+    function updateUI(data) {
+      const status = data.status;
+      updateStatusBadge(status);
+
+      // Step progress - error shows at the step where it happened
+      if (status === 'PENDING') updateSteps(1);
+      else if (status === 'PROCESSING') updateSteps(2);
+      else if (status === 'WAITING_SMS') updateSteps(3);
+      else if (['CODE_READY', 'DONE'].includes(status)) updateSteps(4);
+      else if (status === 'CANCELED') {
+        // Show error at current progress: if no phone yet, step 1; otherwise step 3
+        updateSteps(data.phone ? 3 : 1, true);
+      } else if (status === 'FAILED') {
+        // Failed usually during SMS wait
+        updateSteps(data.phone ? 3 : 2, true);
+      }
+
+      // Phone
+      if (data.phone) {
+        document.getElementById('phoneSection').style.display = 'block';
+        document.getElementById('phoneDisplay').textContent = data.phone;
+      } else {
+        document.getElementById('phoneSection').style.display = 'none';
+      }
+
+      // Code
+      if (data.result_code && ['CODE_READY', 'DONE'].includes(status)) {
+        document.getElementById('codeSection').style.display = 'block';
+        document.getElementById('codeDisplay').textContent = data.result_code;
+      } else {
+        document.getElementById('codeSection').style.display = 'none';
+      }
+
+      // Country
+      if (data.country) {
+        document.getElementById('countryRow').style.display = 'flex';
+        document.getElementById('countryDisplay').textContent = formatCountry(data.country);
+      } else {
+        document.getElementById('countryRow').style.display = 'none';
+      }
+
+      // Timer
+      expiresAt = data.expires_at;
+      providerStartedAt = data.provider_started_at;
+      updateTimer();
+
+      // Actions
+      renderActions(status);
+      updateHint(status);
+
+      // Error display
+      hideError('statusError');
+
+      // Final states
+      if (['DONE', 'FAILED', 'CANCELED'].includes(status)) {
+        stopPolling();
+        document.getElementById('newRedeemSection').style.display = 'block';
+        document.getElementById('timerRow').style.display = 'none';
+      }
+    }
+
+    async function doAction(action) {
+      if (!currentTaskId) return;
+      try {
+        const res = await fetch('/redeem/' + currentTaskId + '/' + action, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: currentVoucher })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showError('statusError', data.detail || '操作失败');
+          return;
+        }
+        updateUI(data);
+        if (!['DONE', 'FAILED', 'CANCELED'].includes(data.status)) {
+          startPolling();
+        }
+      } catch (e) {
+        showError('statusError', '网络错误');
+      }
+    }
+
+    function startPolling() {
+      stopPolling();
+      pollTimer = setInterval(async () => {
+        if (!currentTaskId) return;
+        try {
+          const res = await fetch('/redeem/' + currentTaskId);
+          if (res.ok) {
+            const data = await res.json();
+            updateUI(data);
+          }
+        } catch (e) {}
+      }, 2000);
+
+      countdownTimer = setInterval(updateTimer, 1000);
+    }
+
+    function stopPolling() {
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+    }
+
+    function resetUI() {
+      stopPolling();
+      currentTaskId = null;
+      currentVoucher = '';
+      expiresAt = null;
+      providerStartedAt = null;
+
+      document.getElementById('voucher').value = '';
+      document.getElementById('inputCard').style.display = 'block';
+      document.getElementById('statusCard').classList.remove('active', 'fade-in');
+      document.getElementById('newRedeemSection').style.display = 'none';
+      document.getElementById('phoneSection').style.display = 'none';
+      document.getElementById('codeSection').style.display = 'none';
+      document.getElementById('timerRow').style.display = 'none';
+      document.getElementById('actions').innerHTML = '';
+      hideError('inputError');
+      hideError('statusError');
+
+      const btn = document.getElementById('startBtn');
+      btn.disabled = false;
+      btn.innerHTML = '开始兑换';
+
+      updateSteps(0);
+    }
+
+    // Enter key to submit
+    document.getElementById('voucher').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') startRedeem();
+    });
+  </script>
+</body>
+</html>"""
+        return redeem_html.replace("__REDEEM_WAIT_SECONDS__", str(int(settings.redeem_wait_seconds)))
+
     @app.on_event("startup")
     def _startup() -> None:
         if bool(getattr(settings, "db_auto_create_tables", True)):

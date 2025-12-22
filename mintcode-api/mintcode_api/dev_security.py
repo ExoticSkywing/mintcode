@@ -13,6 +13,7 @@ from sqlalchemy.dialects.mysql import insert as mysql_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from mintcode_api.config import settings
 from mintcode_api.db import SessionLocal
 from mintcode_api.models import DeveloperKey, DeveloperNonce, DeveloperRateLimit
 
@@ -92,7 +93,7 @@ async def require_dev(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="DEV_AUTH_TIMESTAMP_OUT_OF_RANGE")
 
     now = int(time.time())
-    if abs(now - ts) > 300:
+    if abs(now - ts) > int(settings.dev_auth_timestamp_skew_seconds):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="DEV_AUTH_TIMESTAMP_OUT_OF_RANGE")
 
     key = db.execute(select(DeveloperKey).where(DeveloperKey.dev_key_id == x_dev_key_id).limit(1)).scalar_one_or_none()
@@ -127,11 +128,23 @@ async def require_dev(
 
     window_start = (now // 60) * 60
     try:
-        _rate_limit_increment(db, scope="dev_key", scope_id=x_dev_key_id, window_start_ts=window_start, limit=60)
+        _rate_limit_increment(
+            db,
+            scope="dev_key",
+            scope_id=x_dev_key_id,
+            window_start_ts=window_start,
+            limit=int(settings.dev_rate_limit_dev_key_per_min),
+        )
 
         ip = getattr(getattr(request, "client", None), "host", None) or ""
         if ip:
-            _rate_limit_increment(db, scope="ip", scope_id=ip, window_start_ts=window_start, limit=120)
+            _rate_limit_increment(
+                db,
+                scope="ip",
+                scope_id=ip,
+                window_start_ts=window_start,
+                limit=int(settings.dev_rate_limit_ip_per_min),
+            )
 
         db.commit()
     except HTTPException:
@@ -148,7 +161,13 @@ def rate_limit_voucher(db: Session, voucher: str) -> None:
     now = int(time.time())
     window_start = (now // 60) * 60
     try:
-        _rate_limit_increment(db, scope="voucher", scope_id=voucher, window_start_ts=window_start, limit=30)
+        _rate_limit_increment(
+            db,
+            scope="voucher",
+            scope_id=voucher,
+            window_start_ts=window_start,
+            limit=int(settings.dev_rate_limit_voucher_per_min),
+        )
         db.commit()
     except HTTPException:
         db.commit()

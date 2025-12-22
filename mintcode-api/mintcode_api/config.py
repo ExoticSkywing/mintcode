@@ -11,6 +11,12 @@ class Settings(BaseSettings):
     voucher_secret: str
     database_url: str
 
+    dev_auth_timestamp_skew_seconds: int = 300
+
+    dev_rate_limit_voucher_per_min: int = 30
+    dev_rate_limit_dev_key_per_min: int = 60
+    dev_rate_limit_ip_per_min: int = 120
+
     db_auto_create_tables: bool = True
 
     worker_lease_seconds: int = 30

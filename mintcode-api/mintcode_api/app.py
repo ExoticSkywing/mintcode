@@ -14,6 +14,10 @@ from mintcode_api.routes_redeem import router as redeem_router
 def create_app() -> FastAPI:
     app = FastAPI(title="mintcode-api")
 
+    @app.get("/", include_in_schema=False)
+    def root() -> RedirectResponse:
+        return RedirectResponse(url="/redeem-ui")
+
     @app.get("/admin-ui", response_class=HTMLResponse)
     def admin_ui() -> str:
         html = """<!doctype html>

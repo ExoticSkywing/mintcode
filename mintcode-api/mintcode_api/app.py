@@ -29,7 +29,7 @@ def create_app() -> FastAPI:
     <style>
       :root {
         --bg: #ffffff; --bg-alt: #f8fafc; --text: #0f172a; --text-muted: #64748b;
-        --border: #e2e8f0; --primary: #3b82f6; --primary-hover: #2563eb;
+        --border: #e2e8f0; --primary: #8b5cf6; --primary-hover: #7c3aed;
         --danger: #ef4444; --success: #22c55e;
         --sidebar-bg: #0f172a; --sidebar-text: #94a3b8; --sidebar-active: #ffffff;
         --sidebar-active-bg: #1e293b;
@@ -707,8 +707,9 @@ def create_app() -> FastAPI:
   <title>薄荷码工坊</title>
   <style>
     :root {
-      --primary: #6366f1;
-      --primary-hover: #4f46e5;
+      --primary: #8b5cf6;
+      --primary-hover: #7c3aed;
+      --secondary: #10b981;
       --success: #10b981;
       --warning: #f59e0b;
       --danger: #ef4444;
@@ -717,7 +718,7 @@ def create_app() -> FastAPI:
       --text: #1e293b;
       --text-muted: #64748b;
       --border: #e2e8f0;
-      --radius: 12px;
+      --radius: 16px;
     }
     @media (prefers-color-scheme: dark) {
       :root {
@@ -730,14 +731,17 @@ def create_app() -> FastAPI:
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      background: var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: linear-gradient(135deg, #f0fdf4 0%, #f3e8ff 100%);
       color: var(--text);
       min-height: 100vh;
       display: flex;
       justify-content: center;
-      align-items: flex-start;
+      align-items: center;
       padding: 24px 16px;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: linear-gradient(135deg, #022c22 0%, #2e1065 100%); }
     }
     .container {
       width: 100%;
@@ -746,26 +750,38 @@ def create_app() -> FastAPI:
     .card {
       background: var(--card-bg);
       border-radius: var(--radius);
-      box-shadow: 0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -2px rgba(0,0,0,.1);
-      padding: 24px;
-      margin-bottom: 16px;
+      box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
+      padding: 32px;
+      margin-bottom: 24px;
+      border: 1px solid rgba(255,255,255,0.5);
+      backdrop-filter: blur(8px);
     }
     .logo {
       text-align: center;
-      margin-bottom: 24px;
+      margin-bottom: 32px;
     }
     .logo h1 {
-      font-size: 24px;
-      font-weight: 700;
-      background: linear-gradient(135deg, var(--primary), #a855f7);
+      font-size: 32px;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--secondary), var(--primary));
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       background-clip: text;
+      letter-spacing: -0.5px;
+      margin-bottom: 4px;
+    }
+    .logo .brand-en {
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 12px;
     }
     .logo p {
       color: var(--text-muted);
-      font-size: 14px;
-      margin-top: 4px;
+      font-size: 15px;
+      opacity: 0.8;
     }
     .input-group {
       margin-bottom: 16px;
@@ -810,12 +826,14 @@ def create_app() -> FastAPI:
       width: 100%;
     }
     .btn-primary {
-      background: var(--primary);
+      background: linear-gradient(135deg, var(--primary), #a855f7);
       color: white;
+      box-shadow: 0 4px 6px -1px rgba(139, 92, 246, 0.3);
     }
     .btn-primary:hover:not(:disabled) {
-      background: var(--primary-hover);
+      background: linear-gradient(135deg, #7c3aed, #9333ea);
       transform: translateY(-1px);
+      box-shadow: 0 6px 8px -1px rgba(139, 92, 246, 0.4);
     }
     .btn-primary:disabled {
       opacity: .6;
@@ -952,12 +970,13 @@ def create_app() -> FastAPI:
       color: white;
     }
     .code-display {
-      background: linear-gradient(135deg, var(--primary), #a855f7);
+      background: linear-gradient(135deg, var(--secondary), var(--primary));
       color: white;
-      padding: 20px;
+      padding: 24px;
       border-radius: var(--radius);
       text-align: center;
-      margin: 16px 0;
+      margin: 20px 0;
+      box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.3);
     }
     .code-display .label {
       font-size: 12px;
@@ -1145,6 +1164,7 @@ def create_app() -> FastAPI:
 <body>
   <div class="container">
     <div class="logo">
+      <div class="brand-en">MINTCODE</div>
       <h1>薄荷码工坊</h1>
       <p>薄荷一下，码上拥有</p>
     </div>

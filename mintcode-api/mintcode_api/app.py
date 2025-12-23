@@ -1133,6 +1133,58 @@ def create_app() -> FastAPI:
       from { opacity: 0; transform: translateY(10px); }
       to { opacity: 1; transform: translateY(0); }
     }
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+    .tab {
+      flex: 1;
+      padding: 12px;
+      text-align: center;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-muted);
+      border-bottom: 2px solid transparent;
+      transition: all .2s;
+    }
+    .tab:hover {
+      color: var(--primary);
+    }
+    .tab.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+    .tab-content {
+      display: none;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    .query-result {
+      background: var(--bg);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-top: 16px;
+    }
+    .query-result .result-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .query-result .result-row:last-child {
+      border-bottom: none;
+    }
+    .query-result .result-label {
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    .query-result .result-value {
+      font-weight: 500;
+      font-size: 13px;
+    }
   </style>
 </head>
 <body>
@@ -1144,14 +1196,33 @@ def create_app() -> FastAPI:
 
     <!-- 输入卡片 -->
     <div class="card" id="inputCard">
-      <div class="input-group">
-        <label for="voucher">兑换码</label>
-        <input type="text" id="voucher" placeholder="请输入您的兑换码" autocomplete="off" spellcheck="false" />
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('redeem')">兑换验证码</div>
+        <div class="tab" onclick="switchTab('query')">查询订单</div>
       </div>
-      <button class="btn btn-primary" id="startBtn" onclick="startRedeem()">
-        开始兑换
-      </button>
-      <div class="error-msg" id="inputError"></div>
+
+      <div id="redeemTab" class="tab-content active">
+        <div class="input-group">
+          <label for="voucher">兑换码</label>
+          <input type="text" id="voucher" placeholder="请输入您的兑换码" autocomplete="off" spellcheck="false" />
+        </div>
+        <button class="btn btn-primary" id="startBtn" onclick="startRedeem()">
+          开始兑换
+        </button>
+        <div class="error-msg" id="inputError"></div>
+      </div>
+
+      <div id="queryTab" class="tab-content">
+        <div class="input-group">
+          <label for="queryVoucher">卡密</label>
+          <input type="text" id="queryVoucher" placeholder="请输入要查询的卡密" autocomplete="off" spellcheck="false" />
+        </div>
+        <button class="btn btn-primary" id="queryBtn" onclick="queryOrder()">
+          查询订单
+        </button>
+        <div class="error-msg" id="queryError"></div>
+        <div id="queryResult" style="display:none;"></div>
+      </div>
     </div>
 
     <!-- 状态卡片 -->
@@ -1222,6 +1293,88 @@ def create_app() -> FastAPI:
     let countdownTimer = null;
     let expiresAt = null;
     let providerStartedAt = null;
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      if (tab === 'redeem') {
+        document.querySelector('.tabs .tab:first-child').classList.add('active');
+        document.getElementById('redeemTab').classList.add('active');
+      } else {
+        document.querySelector('.tabs .tab:last-child').classList.add('active');
+        document.getElementById('queryTab').classList.add('active');
+      }
+      hideError('inputError');
+      hideError('queryError');
+      document.getElementById('queryResult').style.display = 'none';
+    }
+
+    async function queryOrder() {
+      const code = document.getElementById('queryVoucher').value.trim();
+      if (!code) {
+        showError('queryError', '请输入卡密');
+        return;
+      }
+      hideError('queryError');
+
+      const btn = document.getElementById('queryBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<div class="spinner"></div> 查询中...';
+
+      try {
+        const res = await fetch('/redeem/query', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: code })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          const errMap = {
+            'invalid_code': '卡密无效',
+            'no_order': '该卡密暂无订单记录'
+          };
+          showError('queryError', errMap[data.detail] || data.detail || '查询失败');
+          document.getElementById('queryResult').style.display = 'none';
+          btn.disabled = false;
+          btn.innerHTML = '查询订单';
+          return;
+        }
+
+        renderQueryResult(data);
+        btn.disabled = false;
+        btn.innerHTML = '查询订单';
+      } catch (e) {
+        showError('queryError', '网络错误，请重试');
+        btn.disabled = false;
+        btn.innerHTML = '查询订单';
+      }
+    }
+
+    function renderQueryResult(data) {
+      const statusMap = {
+        'PENDING': '排队中',
+        'PROCESSING': '处理中',
+        'WAITING_SMS': '等待短信',
+        'CODE_READY': '验证码已到达',
+        'DONE': '已完成',
+        'FAILED': '失败',
+        'CANCELED': '已取消'
+      };
+      let html = '<div class="query-result">';
+      html += '<div class="result-row"><span class="result-label">状态</span><span class="result-value">' + (statusMap[data.status] || data.status) + '</span></div>';
+      if (data.phone) {
+        html += '<div class="result-row"><span class="result-label">手机号</span><span class="result-value">' + data.phone + '</span></div>';
+      }
+      if (data.country) {
+        html += '<div class="result-row"><span class="result-label">国家/地区</span><span class="result-value">' + formatCountry(data.country) + '</span></div>';
+      }
+      if (data.result_code) {
+        html += '<div class="result-row"><span class="result-label">验证码</span><span class="result-value" style="font-family:monospace;font-size:16px;color:var(--primary);">' + data.result_code + '</span></div>';
+      }
+      html += '</div>';
+      document.getElementById('queryResult').innerHTML = html;
+      document.getElementById('queryResult').style.display = 'block';
+    }
 
     function formatCountry(raw) {
       if (!raw) return '';

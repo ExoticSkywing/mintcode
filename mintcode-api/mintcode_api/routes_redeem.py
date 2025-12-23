@@ -145,6 +145,23 @@ def redeem_create(
     return _to_response(task, st, db)
 
 
+@router.post("/redeem/query", response_model=RedeemTaskResponse)
+def redeem_query(payload: RedeemCreateRequest, db: Session = Depends(_get_db)) -> RedeemTaskResponse:
+    """Query order history by voucher code."""
+    code = payload.code.strip()
+
+    voucher = db.execute(select(Voucher).where(Voucher.code == code).limit(1)).scalar_one_or_none()
+    if voucher is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="invalid_code")
+
+    task = db.execute(select(RedeemTask).where(RedeemTask.voucher_id == voucher.id).limit(1)).scalar_one_or_none()
+    if task is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no_order")
+
+    st = db.execute(select(RedeemTaskProviderState).where(RedeemTaskProviderState.task_id == task.id).limit(1)).scalar_one_or_none()
+    return _to_response(task, st, db)
+
+
 @router.get("/redeem/{task_id}", response_model=RedeemTaskResponse)
 def redeem_get(task_id: int, db: Session = Depends(_get_db)) -> RedeemTaskResponse:
     task = db.execute(select(RedeemTask).where(RedeemTask.id == task_id).limit(1)).scalar_one_or_none()

@@ -146,7 +146,7 @@ def create_app() -> FastAPI:
       <div class="login-card">
         <div class="login-header">
           <h1>薄荷码工坊 Admin</h1>
-          <p>薄荷一下，码上拥有</p>
+          <p>薄荷一下，快速出码</p>
         </div>
         <div style="margin-bottom: 20px;">
           <label>Admin Key</label>
@@ -1166,7 +1166,7 @@ def create_app() -> FastAPI:
     <div class="logo">
       <div class="brand-en">MINTCODE</div>
       <h1>薄荷码工坊</h1>
-      <p>薄荷一下，码上拥有</p>
+      <p>薄荷一下，快速出码</p>
     </div>
 
     <!-- 输入卡片 -->

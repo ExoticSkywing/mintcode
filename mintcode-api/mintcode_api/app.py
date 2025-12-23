@@ -1360,9 +1360,17 @@ def create_app() -> FastAPI:
       if (status === 'CODE_READY') {
         const completeBtn = document.createElement('button');
         completeBtn.className = 'btn btn-success btn-sm';
-        completeBtn.textContent = '确认完成';
+        completeBtn.textContent = '收到验证码，点击确认完成';
         completeBtn.onclick = () => doAction('complete');
         container.appendChild(completeBtn);
+      }
+
+      if (status === 'DONE') {
+        const nextBtn = document.createElement('button');
+        nextBtn.className = 'btn btn-primary btn-sm';
+        nextBtn.textContent = '获取下一个号码';
+        nextBtn.onclick = () => resetUI();
+        container.appendChild(nextBtn);
       }
 
       if (['CANCELED', 'FAILED'].includes(status)) {
@@ -1380,8 +1388,8 @@ def create_app() -> FastAPI:
         'PENDING': '正在为您分配手机号码，请稍候...',
         'PROCESSING': '正在处理中，请稍候...',
         'WAITING_SMS': '请在目标平台使用上方号码触发短信验证',
-        'CODE_READY': '请尽快使用验证码，过期后将自动完成',
-        'DONE': '兑换已完成',
+        'CODE_READY': '验证码已到达，请尽快使用并点击确认完成',
+        'DONE': '兑换已完成，您可以使用新的卡密继续兑换',
         'FAILED': '兑换失败，您可以重新获取号码再试',
         'CANCELED': '已取消，您可以重新获取号码'
       };

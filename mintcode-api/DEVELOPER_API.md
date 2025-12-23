@@ -1,248 +1,279 @@
-# MintCode Developer API (External Mode)
+# MintCode 开发者 API
 
-This document describes the **Developer API** for programmatic SMS-number redemption.
+本文档描述了用于程序化短信验证码兑换的**开发者 API**。
 
-Principles:
+## 核心原则
 
-- Voucher-first: **`voucher` is the only user-facing credential**.
-- SKU is hidden: voucher is pre-bound to a fixed provider config on the server.
-- Completion boundary: **once a code is delivered, the service is completed and the voucher is consumed**.
-- Cost safety:
-  - Same voucher allows **only 1 active task at a time**.
-  - `cancel` is allowed **only before code is delivered**.
-
----
-
-## 1. Terminology
-
-- **Voucher**: the redeem credential (卡密). Without a voucher, nothing can be started.
-- **Redeem Task**: server-side state machine representing one redemption attempt.
-- **Public Task ID**: the task identifier exposed to developers, **non-guessable**, format `t_<random>`.
+- **卡密优先**：`voucher`（卡密）是唯一的用户凭证
+- **SKU 隐藏**：卡密在服务端预绑定了固定的供应商配置
+- **完成边界**：**一旦验证码送达，服务即完成，卡密即消耗**
+- **成本安全**：
+  - 同一卡密**同时只能有 1 个活跃任务**
+  - **仅在验证码送达前**允许取消
 
 ---
 
-## 2. Authentication (HMAC + timestamp + nonce)
+## 1. 术语
 
-Every request to the Developer API must be signed.
+| 术语 | 说明 |
+|------|------|
+| **卡密 (Voucher)** | 兑换凭证，没有卡密无法发起任何操作 |
+| **兑换任务 (Redeem Task)** | 服务端状态机，代表一次兑换尝试 |
+| **公开任务 ID (Public Task ID)** | 暴露给开发者的任务标识符，格式：`t_<随机字符串>`，不可猜测 |
 
-### 2.1 Credentials
+---
 
-You will be issued:
+## 2. 认证（HMAC + 时间戳 + 随机数）
 
-- `dev_key_id` (public)
-- `dev_key_secret` (private, keep it safe)
+所有开发者 API 请求都必须签名。
 
-### 2.2 Required headers
+### 2.1 凭证
 
-- `X-Dev-Key-Id`: your `dev_key_id`
-- `X-Dev-Timestamp`: Unix timestamp **in seconds**
-- `X-Dev-Nonce`: random string (recommend 16+ chars)
-- `X-Dev-Signature`: signature string (Base64)
+你将获得：
 
-### 2.3 Timestamp window
+- `dev_key_id`（公开）
+- `dev_key_secret`（私密，请妥善保管）
 
-Server will reject requests if:
+### 2.2 必需的请求头
 
-- `abs(server_now_seconds - X-Dev-Timestamp) > 300`
+| Header | 说明 |
+|--------|------|
+| `X-Dev-Key-Id` | 你的 `dev_key_id` |
+| `X-Dev-Timestamp` | Unix 时间戳（**秒**） |
+| `X-Dev-Nonce` | 随机字符串（建议 16+ 字符） |
+| `X-Dev-Signature` | 签名字符串（Base64） |
 
-### 2.4 Replay protection
+### 2.3 时间窗口
 
-Server will reject requests if the tuple below is reused within the accepted time window:
+服务端会拒绝请求，如果：
 
-- `(X-Dev-Key-Id, X-Dev-Timestamp, X-Dev-Nonce)`
+```
+abs(服务器当前时间秒 - X-Dev-Timestamp) > 300
+```
 
-### 2.5 Canonical string
+### 2.4 重放保护
 
-Build a canonical string using **exactly** the following fields:
+服务端会拒绝请求，如果以下元组在时间窗口内被重用：
 
-- `METHOD`: uppercase HTTP method
-- `PATH`: request path (e.g. `/dev/redeem/t_xxx/wait`), without scheme/host
-- `QUERY`: raw query string without leading `?` (empty if none)
-- `TIMESTAMP`: `X-Dev-Timestamp`
-- `NONCE`: `X-Dev-Nonce`
-- `BODY_SHA256`: sha256 hex of request body bytes; for requests without body use sha256 of empty bytes
+```
+(X-Dev-Key-Id, X-Dev-Timestamp, X-Dev-Nonce)
+```
 
-Canonical format:
+### 2.5 规范字符串
+
+使用以下字段构建规范字符串：
+
+| 字段 | 说明 |
+|------|------|
+| `METHOD` | 大写 HTTP 方法 |
+| `PATH` | 请求路径（如 `/dev/redeem/t_xxx/wait`），不含域名 |
+| `QUERY` | 原始查询字符串，不含前导 `?`（无则为空） |
+| `TIMESTAMP` | `X-Dev-Timestamp` |
+| `NONCE` | `X-Dev-Nonce` |
+| `BODY_SHA256` | 请求体的 SHA256 十六进制；无请求体则为空字节的 SHA256 |
+
+格式：
 
 ```
 METHOD\nPATH\nQUERY\nTIMESTAMP\nNONCE\nBODY_SHA256
 ```
 
-### 2.6 Signature
+### 2.6 签名
 
-- `signature_bytes = HMAC-SHA256(dev_key_secret, canonical_string_bytes)`
-- `X-Dev-Signature = Base64(signature_bytes)`
+```
+signature_bytes = HMAC-SHA256(dev_key_secret, canonical_string_bytes)
+X-Dev-Signature = Base64(signature_bytes)
+```
 
 ---
 
-## 3. Idempotency
+## 3. 幂等性
 
 ### 3.1 `POST /dev/redeem`
 
-For creating a redeem task, you should provide:
+创建兑换任务时，应提供：
 
-- `Idempotency-Key`: a unique string for this client operation
+- `Idempotency-Key`：该客户端操作的唯一字符串
 
-If you retry the same operation due to timeouts, reuse the same `Idempotency-Key`.
-
----
-
-## 4. Public Task ID
-
-All task endpoints use a **non-guessable** public ID:
-
-- Format: `t_` + URL-safe random string
-- Example: `t_q3kX7m2yWm3aZg6oGm0nqQ`
-
-Notes:
-
-- Case-sensitive
-- Not sortable
+如果因超时需要重试，请**复用相同的** `Idempotency-Key`。
 
 ---
 
-## 5. Endpoints
+## 4. 公开任务 ID
 
-Base URL examples:
+所有任务端点使用**不可猜测**的公开 ID：
+
+- 格式：`t_` + URL 安全随机字符串
+- 示例：`t_q3kX7m2yWm3aZg6oGm0nqQ`
+
+注意：
+
+- 区分大小写
+- 不可排序
+
+---
+
+## 5. 接口
+
+基础 URL 示例：
 
 - `https://<your-domain>`
-- `http://localhost:8123` (dev compose)
+- `http://localhost:8123`（开发环境）
 
-### 5.1 Create / Start a redeem task
+### 5.1 创建/启动兑换任务
 
 `POST /dev/redeem`
 
-Request JSON:
+**请求体 JSON**：
 
-- `voucher`: string
+```json
+{
+  "voucher": "你的卡密"
+}
+```
 
-Headers:
+**请求头**：
 
-- HMAC headers (required)
-- `Idempotency-Key` (strongly recommended)
+- HMAC 签名头（必需）
+- `Idempotency-Key`（强烈建议）
 
-Response fields (typical):
+**响应字段**：
 
-- `task_id`: public task id (`t_...`)
-- `status`: `PENDING` / `WAITING_SMS` / `CODE_READY` / `CANCELED` / `FAILED` / `DONE`
-- `phone`: phone number if already available
-- `expires_at`: upstream expiry time if available
+| 字段 | 说明 |
+|------|------|
+| `task_id` | 公开任务 ID（`t_...`） |
+| `status` | `PENDING` / `WAITING_SMS` / `CODE_READY` / `CANCELED` / `FAILED` / `DONE` |
+| `phone` | 手机号（如已获取） |
+| `expires_at` | 上游过期时间（如有） |
 
-Behavior:
+**行为**：
 
-- Same voucher allows **only 1 active task**.
-- If the voucher already has an active task, the server may return the existing `task_id`.
+- 同一卡密**只允许 1 个活跃任务**
+- 如果该卡密已有活跃任务，服务端会返回已存在的 `task_id`
 
-### 5.2 Wait for SMS code (long-poll)
+### 5.2 等待短信验证码（长轮询）
 
 `GET /dev/redeem/{task_id}/wait?timeout=30`
 
-Query:
+**查询参数**：
 
-- `timeout`: seconds to wait (suggest 10~30)
+- `timeout`：等待秒数（建议 10~30）
 
-Response:
+**响应**：
 
-- If code is available:
-  - `status=CODE_READY`
-  - `code`: string
-  - `final=true`
-  - `voucher_consumed=true`
-- If not yet available:
-  - `status=WAITING_SMS`
-  - `retry_after_seconds`: integer
+验证码已到达时：
+```json
+{
+  "status": "CODE_READY",
+  "code": "123456",
+  "final": true,
+  "voucher_consumed": true
+}
+```
 
-### 5.3 Get task status (poll)
+尚未到达时：
+```json
+{
+  "status": "WAITING_SMS",
+  "retry_after_seconds": 5
+}
+```
+
+### 5.3 获取任务状态（轮询）
 
 `GET /dev/redeem/{task_id}`
 
-Response:
+**响应字段**：
 
 - `status`
-- `phone` (if available)
-- `code` (only if `CODE_READY`)
-- `expires_at` (if available)
+- `phone`（如有）
+- `code`（仅当 `CODE_READY`）
+- `expires_at`（如有）
 
-### 5.4 Cancel (allowed before code is delivered)
+### 5.4 取消（仅在验证码送达前允许）
 
 `POST /dev/redeem/{task_id}/cancel`
 
-Rules:
+**规则**：
 
-- Allowed when task is not final, including the stage where phone is already obtained but **code not delivered**.
-- Rejected if task is already `CODE_READY` / `DONE`.
+- 任务未结束时可取消，包括已获取手机号但**验证码未送达**的阶段
+- 任务已是 `CODE_READY` / `DONE` 时会被拒绝
 
-Idempotency:
+**幂等性**：
 
-- Repeating cancel should return the same result (e.g. already canceled).
-
----
-
-## 6. Business rules (must-read)
-
-### 6.1 Code delivery means completion
-
-Once the server returns `code` (task becomes `CODE_READY`):
-
-- The service is considered completed.
-- The voucher is considered consumed (lifecycle ended).
-- Whether the code works on a target platform is outside this service scope.
-
-### 6.2 No-dispute boundary
-
-- **Code delivered = completed**
-- **No code = you may cancel or wait until expiry**
+- 重复取消应返回相同结果（如：已取消）
 
 ---
 
-## 7. Errors
+## 6. 业务规则（必读）
 
-### 7.1 Auth errors
+### 6.1 验证码送达即完成
 
-- `DEV_AUTH_MISSING_HEADERS` (401)
-- `DEV_AUTH_INVALID_SIGNATURE` (401)
-- `DEV_AUTH_TIMESTAMP_OUT_OF_RANGE` (401)
-- `DEV_AUTH_NONCE_REPLAY` (401)
-- `DEV_AUTH_KEY_DISABLED` (403)
+一旦服务端返回 `code`（任务变为 `CODE_READY`）：
 
-### 7.2 Rate limit
+- 服务视为**已完成**
+- 卡密视为**已消耗**（生命周期结束）
+- 验证码在目标平台是否有效，**不在本服务范围内**
 
-- `DEV_RATE_LIMITED` (429)
-  - may include `retry_after_seconds`
+### 6.2 无争议边界
 
-### 7.3 Business errors
-
-- `VOUCHER_INVALID` (400/404)
-- `VOUCHER_CONSUMED` (409)
-- `TASK_NOT_FOUND` (404)
-- `TASK_ALREADY_CODE_READY` (409)  
-  Returned when cancel is requested after code is delivered.
-- `IDEMPOTENCY_KEY_CONFLICT` (409)
+| 状态 | 结论 |
+|------|------|
+| **已出码** | 订单完成，不可退 |
+| **未出码** | 可取消或等待过期 |
 
 ---
 
-## 8. Minimal integration flow (recommended)
+## 7. 错误码
 
-1) `POST /dev/redeem` with `voucher` + `Idempotency-Key`
+### 7.1 认证错误
 
-2) Receive `task_id` and (usually) `phone`
+| 错误码 | HTTP 状态 | 说明 |
+|--------|-----------|------|
+| `DEV_AUTH_MISSING_HEADERS` | 401 | 缺少认证头 |
+| `DEV_AUTH_INVALID_SIGNATURE` | 401 | 签名无效 |
+| `DEV_AUTH_TIMESTAMP_OUT_OF_RANGE` | 401 | 时间戳超出范围 |
+| `DEV_AUTH_NONCE_REPLAY` | 401 | 随机数重放 |
+| `DEV_AUTH_KEY_DISABLED` | 403 | 密钥已禁用 |
 
-3) Call `GET /dev/redeem/{task_id}/wait?timeout=30` in a loop until:
+### 7.2 限流
 
-- `status=CODE_READY` and you receive `code`
+| 错误码 | HTTP 状态 | 说明 |
+|--------|-----------|------|
+| `DEV_RATE_LIMITED` | 429 | 请求过于频繁，可能包含 `retry_after_seconds` |
 
-4) If you need to stop before code is delivered:
+### 7.3 业务错误
 
-- `POST /dev/redeem/{task_id}/cancel`
+| 错误码 | HTTP 状态 | 说明 |
+|--------|-----------|------|
+| `VOUCHER_INVALID` | 404 | 卡密无效 |
+| `VOUCHER_CONSUMED` | 409 | 卡密已被使用 |
+| `TASK_NOT_FOUND` | 404 | 任务不存在 |
+| `TASK_ALREADY_CODE_READY` | 409 | 验证码已送达后请求取消 |
+| `IDEMPOTENCY_KEY_CONFLICT` | 409 | 幂等键冲突 |
 
 ---
 
-## 9. Notes for debugging
+## 8. 最简集成流程（推荐）
 
-When contacting support, provide:
+1. `POST /dev/redeem`，携带 `voucher` + `Idempotency-Key`
+
+2. 获取 `task_id` 和 `phone`（通常会立即返回）
+
+3. 循环调用 `GET /dev/redeem/{task_id}/wait?timeout=30`，直到：
+   - `status=CODE_READY` 并获取到 `code`
+
+4. 如需在验证码送达前停止：
+   - `POST /dev/redeem/{task_id}/cancel`
+
+---
+
+## 9. 调试说明
+
+联系技术支持时，请提供：
 
 - `dev_key_id`
-- `task_id` (public)
-- `voucher` (or a redacted form)
-- request timestamp/nonce
-- server returned `error.code`
+- `task_id`（公开 ID）
+- `voucher`（可脱敏）
+- 请求的时间戳/随机数
+- 服务端返回的错误码

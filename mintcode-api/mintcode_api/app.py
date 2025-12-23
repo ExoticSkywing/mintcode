@@ -1417,7 +1417,11 @@ def create_app() -> FastAPI:
         });
         const data = await res.json();
         if (!res.ok) {
-          const msg = data.detail === 'invalid_code' ? '兑换码无效' : (data.detail || '请求失败');
+          const errMap = {
+            'invalid_code': '兑换码无效',
+            'voucher_used': '此卡密已被使用'
+          };
+          const msg = errMap[data.detail] || data.detail || '请求失败';
           showError('inputError', msg);
           btn.disabled = false;
           btn.innerHTML = '开始兑换';

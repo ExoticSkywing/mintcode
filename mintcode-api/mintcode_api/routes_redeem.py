@@ -91,6 +91,9 @@ def redeem_create(
 
     existing = db.execute(select(RedeemTask).where(RedeemTask.voucher_id == voucher.id).limit(1)).scalar_one_or_none()
     if existing is not None:
+        if existing.status in ("CODE_READY", "DONE"):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="voucher_used")
+
         if existing.status in ("CANCELED", "FAILED"):
             st = db.execute(
                 select(RedeemTaskProviderState).where(RedeemTaskProviderState.task_id == existing.id).limit(1)

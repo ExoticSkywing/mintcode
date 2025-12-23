@@ -21,722 +21,673 @@ def create_app() -> FastAPI:
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>MintCode Admin UI</title>
+    <title>MintCode Admin</title>
     <style>
-      :root { color-scheme: light dark; }
-      body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; margin: 20px; }
-      .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-      .card { border: 1px solid rgba(127,127,127,.35); border-radius: 10px; padding: 12px; margin-top: 14px; }
-      label { font-size: 12px; opacity: .8; }
-      input, select, button, textarea { padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(127,127,127,.35); }
-      button { cursor: pointer; }
-      table { width: 100%; border-collapse: collapse; }
-      th, td { border-bottom: 1px solid rgba(127,127,127,.25); padding: 8px; text-align: left; font-size: 13px; }
-      th { position: sticky; top: 0; background: rgba(127,127,127,.08); }
-      code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; }
-      .muted { opacity: .7; }
-      .right { margin-left: auto; }
+      :root {
+        --bg: #ffffff; --bg-alt: #f8fafc; --text: #0f172a; --text-muted: #64748b;
+        --border: #e2e8f0; --primary: #3b82f6; --primary-hover: #2563eb;
+        --danger: #ef4444; --success: #22c55e;
+        --sidebar-bg: #0f172a; --sidebar-text: #94a3b8; --sidebar-active: #ffffff;
+        --sidebar-active-bg: #1e293b;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0f172a; --bg-alt: #1e293b; --text: #f1f5f9; --text-muted: #94a3b8;
+          --border: #334155; --primary: #60a5fa; --primary-hover: #3b82f6;
+          --sidebar-bg: #020617; --sidebar-active-bg: #1e293b;
+        }
+      }
+      * { box-sizing: border-box; outline: none; }
+      body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; }
+      
+      /* Login View */
+      #loginView {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: var(--bg-alt); display: flex; align-items: center; justify-content: center;
+        z-index: 1000;
+      }
+      .login-card {
+        background: var(--bg); padding: 40px; border-radius: 12px;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06);
+        width: 100%; max-width: 400px; border: 1px solid var(--border);
+      }
+      .login-header { text-align: center; margin-bottom: 24px; }
+      .login-header h1 { font-size: 24px; font-weight: 600; margin: 0; color: var(--text); }
+      .login-header p { margin: 8px 0 0; color: var(--text-muted); font-size: 14px; }
+      
+      /* Dashboard Layout */
+      #dashboardView { display: none; height: 100%; display: flex; }
+      aside {
+        width: 240px; background: var(--sidebar-bg); color: var(--sidebar-text);
+        display: flex; flex-direction: column; flex-shrink: 0;
+      }
+      aside .brand {
+        padding: 20px; font-size: 18px; font-weight: 700; color: #fff;
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+      }
+      aside nav { flex: 1; padding: 12px; overflow-y: auto; }
+      .nav-item {
+        display: block; padding: 10px 12px; margin-bottom: 4px;
+        border-radius: 6px; cursor: pointer; transition: all .2s;
+        font-size: 14px; font-weight: 500;
+      }
+      .nav-item:hover { background: rgba(255,255,255,0.05); color: #fff; }
+      .nav-item.active { background: var(--sidebar-active-bg); color: var(--sidebar-active); }
+      
+      aside .user-info {
+        padding: 16px; border-top: 1px solid rgba(255,255,255,0.1);
+        font-size: 13px;
+      }
+      .logout-btn {
+        background: none; border: none; color: var(--danger);
+        padding: 0; cursor: pointer; font-size: 13px; margin-top: 8px;
+      }
+
+      main { flex: 1; overflow-y: auto; background: var(--bg-alt); padding: 24px; position: relative; }
+      
+      /* Components */
+      .section { display: none; max-width: 1200px; margin: 0 auto; }
+      .section.active { display: block; animation: fadeIn .2s; }
+      @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: 0; } }
+      
+      h2 { font-size: 20px; font-weight: 600; margin: 0 0 20px; color: var(--text); }
+      .card { background: var(--bg); border-radius: 8px; border: 1px solid var(--border); padding: 20px; margin-bottom: 20px; }
+      .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+      
+      label { display: block; font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 6px; }
+      input, select, textarea {
+        width: 100%; padding: 8px 12px; border-radius: 6px;
+        border: 1px solid var(--border); background: var(--bg); color: var(--text);
+        font-size: 14px; transition: border-color .2s;
+      }
+      input:focus, select:focus, textarea:focus { border-color: var(--primary); }
+      
+      button {
+        padding: 8px 16px; border-radius: 6px; border: none;
+        background: var(--primary); color: white; font-size: 14px; font-weight: 500;
+        cursor: pointer; transition: opacity .2s;
+      }
+      button:hover { opacity: .9; }
+      button.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+      button.secondary:hover { background: var(--bg-alt); }
+      
+      table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      th { text-align: left; padding: 12px; border-bottom: 1px solid var(--border); color: var(--text-muted); font-weight: 500; }
+      td { padding: 12px; border-bottom: 1px solid var(--border); color: var(--text); }
+      tr:last-child td { border-bottom: none; }
       .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+      
+      .status-badge {
+        display: inline-block; padding: 2px 8px; border-radius: 12px;
+        font-size: 12px; font-weight: 500;
+      }
+      .badge-PENDING { background: #e2e8f0; color: #475569; }
+      .badge-WAITING_SMS { background: #dbeafe; color: #1e40af; }
+      .badge-CODE_READY { background: #dcfce7; color: #166534; }
+      .badge-DONE { background: #f0fdf4; color: #15803d; }
+      .badge-FAILED { background: #fee2e2; color: #991b1b; }
+      .badge-CANCELED { background: #f1f5f9; color: #64748b; }
+      
+      #globalErr {
+        position: fixed; bottom: 20px; right: 20px;
+        background: #fee2e2; color: #991b1b; padding: 12px 20px;
+        border-radius: 8px; border: 1px solid #fecaca;
+        display: none; z-index: 2000; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      }
     </style>
   </head>
   <body>
-    <h2>MintCode Admin UI</h2>
-    <div class=\"card\">
-      <div class=\"row\">
-        <div>
-          <label>Admin Key (Header: <code>X-Admin-Key</code>)</label><br />
-          <input id=\"adminKey\" class=\"mono\" placeholder=\"enter admin key\" style=\"min-width: 320px\" />
+    <!-- Login View -->
+    <div id="loginView">
+      <div class="login-card">
+        <div class="login-header">
+          <h1>MintCode Admin</h1>
+          <p>请输入管理员密钥以继续</p>
         </div>
-        <button id=\"saveKey\">Save</button>
-        <span id=\"keyStatus\" class=\"muted\"></span>
-        <div class=\"right\">
-          <button id=\"refreshAll\">Refresh</button>
-          <label style=\"margin-left: 8px\">Auto refresh</label>
-          <select id=\"autoRefresh\">
-            <option value=\"0\">Off</option>
-            <option value=\"2\" selected>2s</option>
-            <option value=\"5\">5s</option>
-          </select>
+        <div style="margin-bottom: 20px;">
+          <label>Admin Key</label>
+          <input type="password" id="loginKey" placeholder="Enter your key..." />
         </div>
+        <button onclick="doLogin()" style="width: 100%">进入后台</button>
+        <div id="loginErr" style="color: var(--danger); font-size: 13px; margin-top: 12px; text-align: center; display: none;"></div>
       </div>
     </div>
 
-    <div class=\"card\">
-      <h3>Generate Vouchers</h3>
-      <div class=\"row\">
-        <div>
-          <label>SKU</label><br />
-          <input id=\"genSku\" placeholder=\"default\" />
+    <!-- Dashboard View -->
+    <div id="dashboardView" style="display: none;">
+      <aside>
+        <div class="brand">MintCode</div>
+        <nav>
+          <div class="nav-item active" onclick="nav('tasks')">兑换任务 (Redeem)</div>
+          <div class="nav-item" onclick="nav('vouchers')">卡密管理 (Vouchers)</div>
+          <div class="nav-item" onclick="nav('config')">配置 (Configuration)</div>
+          <div class="nav-item" onclick="nav('test')">手动测试 (Manual)</div>
+        </nav>
+        <div class="user-info">
+          <div style="margin-bottom: 4px; opacity: .8;">Admin Access</div>
+          <button class="logout-btn" onclick="doLogout()">退出登录</button>
         </div>
-        <div>
-          <label>Count</label><br />
-          <input id=\"genCount\" type=\"number\" value=\"10\" min=\"1\" max=\"100000\" />
+      </aside>
+      
+      <main>
+        <!-- Tasks Section -->
+        <div id="view-tasks" class="section active">
+          <div class="row" style="margin-bottom: 20px; justify-content: space-between;">
+            <h2>兑换任务列表</h2>
+            <div class="row" style="gap: 8px;">
+              <select id="taskStatus" style="width: 120px" onchange="loadTasks()">
+                <option value="">全部状态</option>
+                <option value="PENDING">PENDING</option>
+                <option value="WAITING_SMS">WAITING_SMS</option>
+                <option value="PROCESSING">PROCESSING</option>
+                <option value="CODE_READY">CODE_READY</option>
+                <option value="DONE">DONE</option>
+                <option value="FAILED">FAILED</option>
+                <option value="CANCELED">CANCELED</option>
+              </select>
+              <input id="taskSku" placeholder="SKU 过滤" style="width: 120px" />
+              <button onclick="loadTasks()">刷新</button>
+              <div style="font-size: 12px; display: flex; align-items: center; gap: 4px;">
+                <input type="checkbox" id="autoRefresh" checked style="width: auto;" /> 自动刷新
+              </div>
+            </div>
+          </div>
+          
+          <div class="card" style="padding: 0; overflow: hidden;">
+            <div style="overflow-x: auto;">
+              <table style="min-width: 1000px;">
+                <thead>
+                  <tr>
+                    <th style="width: 60px">ID</th>
+                    <th>SKU</th>
+                    <th>Status</th>
+                    <th>Phone</th>
+                    <th>Code</th>
+                    <th>Voucher</th>
+                    <th>Updated</th>
+                    <th style="width: 120px">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="tasksBody"></tbody>
+              </table>
+            </div>
+          </div>
         </div>
-        <div>
-          <label>Length</label><br />
-          <input id=\"genLen\" type=\"number\" value=\"32\" min=\"12\" max=\"64\" />
-        </div>
-        <div>
-          <label>Label (optional)</label><br />
-          <input id=\"genLabel\" placeholder=\"\" />
-        </div>
-        <button id=\"doGenerate\">Generate</button>
-      </div>
-      <div style=\"margin-top: 10px\">
-        <label>Result (plain text codes)</label><br />
-        <textarea id=\"genOut\" rows=\"6\" style=\"width: 100%\" spellcheck=\"false\"></textarea>
-      </div>
-    </div>
 
-    <div class=\"card\">
-      <div class=\"row\">
-        <h3 style=\"margin: 0\">Batches</h3>
-        <div class=\"right\">
-          <label>SKU filter</label>
-          <input id=\"batchSkuFilter\" placeholder=\"optional\" />
-          <button id=\"loadBatches\">Load</button>
-        </div>
-      </div>
-      <div style=\"overflow: auto; max-height: 420px\">
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>SKU</th>
-              <th>Count</th>
-              <th>Created</th>
-              <th>Export</th>
-            </tr>
-          </thead>
-          <tbody id=\"batchesBody\"></tbody>
-        </table>
-      </div>
-      <div style=\"margin-top: 10px\">
-        <label>Export Output</label><br />
-        <textarea id=\"exportOut\" rows=\"6\" style=\"width: 100%\" spellcheck=\"false\"></textarea>
-      </div>
-    </div>
+        <!-- Vouchers Section -->
+        <div id="view-vouchers" class="section">
+          <h2>卡密生成与管理</h2>
+          
+          <div class="card">
+            <h3 style="margin-top: 0">批量生成</h3>
+            <div class="row">
+              <div style="flex: 1; min-width: 120px;">
+                <label>SKU</label>
+                <input id="genSku" placeholder="default" />
+              </div>
+              <div style="width: 100px;">
+                <label>数量</label>
+                <input id="genCount" type="number" value="10" />
+              </div>
+              <div style="width: 100px;">
+                <label>长度</label>
+                <input id="genLen" type="number" value="32" />
+              </div>
+              <div style="flex: 1; min-width: 120px;">
+                <label>标签 (可选)</label>
+                <input id="genLabel" placeholder="" />
+              </div>
+              <div style="width: 100px;">
+                <label>&nbsp;</label>
+                <button onclick="doGenerate()" style="width: 100%">生成</button>
+              </div>
+            </div>
+            <div style="margin-top: 16px;">
+              <label>生成结果</label>
+              <textarea id="genOut" rows="5" spellcheck="false" placeholder="生成的卡密将显示在这里..."></textarea>
+            </div>
+          </div>
 
-    <div class="card">
-      <h3>SKU Provider Config (5sim)</h3>
-      <div class="row">
-        <div>
-          <label>SKU ID</label><br />
-          <input id="cfgSku" class="mono" placeholder="e.g. tg1" />
+          <div class="card">
+            <div class="row" style="justify-content: space-between; margin-bottom: 16px;">
+              <h3 style="margin: 0">生成批次记录</h3>
+              <div class="row" style="gap: 8px;">
+                <input id="batchSkuFilter" placeholder="SKU 过滤" style="width: 120px" />
+                <button onclick="loadBatches()" class="secondary">刷新列表</button>
+              </div>
+            </div>
+            <table style="margin-bottom: 16px;">
+              <thead><tr><th>ID</th><th>SKU</th><th>Count</th><th>Time</th><th>Action</th></tr></thead>
+              <tbody id="batchesBody"></tbody>
+            </table>
+            <label>导出结果</label>
+            <textarea id="exportOut" rows="5" spellcheck="false" placeholder="导出的卡密将显示在这里..."></textarea>
+          </div>
         </div>
-        <div>
-          <label>Category</label><br />
-          <select id=\"cfgCategory\">
-            <option value=\"activation\" selected>activation</option>
-            <option value=\"hosting\">hosting</option>
-          </select>
-        </div>
-        <div>
-          <label>Country</label><br />
-          <input id=\"cfgCountry\" class=\"mono\" placeholder=\"e.g. russia / any\" />
-        </div>
-        <div>
-          <label>Operator</label><br />
-          <input id=\"cfgOperator\" class=\"mono\" placeholder=\"e.g. any\" />
-        </div>
-        <div>
-          <label>Product</label><br />
-          <input id=\"cfgProduct\" class=\"mono\" placeholder=\"e.g. telegram\" />
-        </div>
-        <div>
-          <label>Poll (sec)</label><br />
-          <input id=\"cfgPoll\" type=\"number\" value=\"5\" min=\"1\" max=\"300\" />
-        </div>
-        <div>
-          <label>Reuse</label><br />
-          <input id=\"cfgReuse\" type=\"checkbox\" />
-        </div>
-        <div>
-          <label>Voice</label><br />
-          <input id="cfgVoice" type="checkbox" />
-        </div>
-        <div>
-          <label>History</label><br />
-          <select id="cfgHist" style="min-width: 320px"></select>
-        </div>
-        <button id="cfgLoad">Load</button>
-        <button id="cfgSave">Save</button>
-        <button id="cfgHistLoad">Load History</button>
-      </div>
-      <div class="muted" style="margin-top: 10px" id="cfgOut"></div>
-    </div>
 
-    <div class="card">
-      <div class="row">
-        <h3 style="margin: 0">Featured Provider Configs (Auto-collected)</h3>
-        <div class="right">
-          <label>SKU</label>
-          <input id="featSku" placeholder="optional" />
-          <button id="loadFeatured">Load</button>
-        </div>
-      </div>
-      <div style="overflow: auto; max-height: 260px">
-        <table>
-          <thead>
-            <tr>
-              <th>Count</th>
-              <th>Avg Cost</th>
-              <th>Total Cost</th>
-              <th>Last</th>
-              <th>Country</th>
-              <th>Operator</th>
-              <th>Product</th>
-              <th>Reuse</th>
-              <th>Voice</th>
-              <th>Poll</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="featuredBody"></tbody>
-        </table>
-      </div>
-      <div class="muted" style="margin-top: 10px" id="featuredOut"></div>
-    </div>
+        <!-- Config Section -->
+        <div id="view-config" class="section">
+          <h2>供应商配置 (SKU Config)</h2>
+          
+          <div class="card">
+            <h3 style="margin-top: 0">SKU 设置 (5sim)</h3>
+            <div class="row" style="margin-bottom: 16px;">
+              <div style="flex: 2;">
+                <label>目标 SKU ID</label>
+                <div class="row" style="gap: 0;">
+                  <input id="cfgSku" class="mono" placeholder="e.g. tg1" style="border-top-right-radius: 0; border-bottom-right-radius: 0;" />
+                  <button onclick="loadSkuConfig()" style="border-top-left-radius: 0; border-bottom-left-radius: 0;">加载配置</button>
+                </div>
+              </div>
+              <div style="flex: 3;">
+                 <label>历史记录</label>
+                 <select id="cfgHist"></select>
+              </div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px;">
+              <div>
+                <label>Country</label>
+                <input id="cfgCountry" class="mono" placeholder="e.g. russia / any" />
+              </div>
+              <div>
+                <label>Operator</label>
+                <input id="cfgOperator" class="mono" placeholder="e.g. any" />
+              </div>
+              <div>
+                <label>Product</label>
+                <input id="cfgProduct" class="mono" placeholder="e.g. telegram" />
+              </div>
+              <div>
+                <label>Category</label>
+                <select id="cfgCategory">
+                  <option value="activation">activation</option>
+                  <option value="hosting">hosting</option>
+                </select>
+              </div>
+              <div>
+                <label>Poll Interval (s)</label>
+                <input id="cfgPoll" type="number" value="5" min="1" />
+              </div>
+            </div>
+            
+            <div class="row" style="margin-bottom: 20px;">
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <input id="cfgReuse" type="checkbox" style="width: auto;" /> <label style="margin:0; display:inline;">Reuse Number</label>
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center; margin-left: 16px;">
+                <input id="cfgVoice" type="checkbox" style="width: auto;" /> <label style="margin:0; display:inline;">Voice SMS</label>
+              </div>
+            </div>
 
-    <div class="card">
-      <h3>Redeem (Create Task)</h3>
-      <div class="row">
-        <div style="flex: 1">
-          <label>Voucher Code</label><br />
-          <input id="redeemCode" class="mono" placeholder="paste voucher code here" style="width: 100%" />
-        </div>
-        <button id="doRedeem">Redeem</button>
-      </div>
-      <div class="muted" style="margin-top: 10px" id="redeemOut"></div>
-      <div class="row" style="margin-top: 10px" id="redeemActions"></div>
-    </div>
+            <div class="row">
+               <button onclick="saveSkuConfig()">保存配置</button>
+               <span id="cfgOut" class="mono" style="font-size: 13px; color: var(--text-muted); margin-left: 10px;"></span>
+            </div>
+          </div>
 
-    <div class=\"card\">
-      <div class=\"row\">
-        <h3 style=\"margin: 0\">Redeem Tasks</h3>
-        <div class=\"right\">
-          <label>Status</label>
-          <select id=\"taskStatus\">
-            <option value=\"\">(any)</option>
-            <option value=\"PENDING\">PENDING</option>
-            <option value=\"WAITING_SMS\">WAITING_SMS</option>
-            <option value=\"PROCESSING\">PROCESSING</option>
-            <option value=\"CODE_READY\">CODE_READY</option>
-            <option value=\"DONE\">DONE</option>
-            <option value=\"FAILED\">FAILED</option>
-            <option value=\"CANCELED\">CANCELED</option>
-          </select>
-          <label>SKU</label>
-          <input id=\"taskSku\" placeholder=\"optional\" />
-          <button id=\"loadTasks\">Load</button>
+          <div class="card">
+            <h3 style="margin-top: 0">推荐配置 (Auto-collected)</h3>
+            <div class="row" style="margin-bottom: 12px;">
+              <input id="featSku" placeholder="SKU (Optional)" style="width: 200px;" />
+              <button onclick="loadFeatured()" class="secondary">加载推荐</button>
+            </div>
+            <div style="overflow-x: auto;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Success</th><th>Avg Cost</th><th>Last</th><th>Details</th><th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="featuredBody"></tbody>
+              </table>
+            </div>
+          </div>
         </div>
-      </div>
-      <div style=\"overflow: auto; max-height: 520px\">
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>SKU</th>
-              <th>Status</th>
-              <th>Result</th>
-              <th>Phone</th>
-              <th>Order</th>
-              <th>Upstream</th>
-              <th>Price</th>
-              <th>Error</th>
-              <th>Actions</th>
-              <th>Voucher</th>
-              <th>Updated</th>
-            </tr>
-          </thead>
-          <tbody id=\"tasksBody\"></tbody>
-        </table>
-      </div>
-      <div id=\"err\" class=\"muted\" style=\"margin-top: 10px\"></div>
+
+        <!-- Manual Test Section -->
+        <div id="view-test" class="section">
+          <h2>手动测试</h2>
+          <div class="card">
+            <label>输入卡密进行测试 (Create Task)</label>
+            <div class="row">
+              <input id="redeemCode" class="mono" placeholder="paste voucher code here" style="flex: 1;" />
+              <button onclick="doRedeem()">执行兑换</button>
+            </div>
+            <pre id="redeemOut" style="background: var(--bg-alt); padding: 12px; border-radius: 6px; margin-top: 16px; min-height: 60px; font-size: 13px;"></pre>
+            <div id="redeemActions" class="row" style="margin-top: 12px;"></div>
+          </div>
+        </div>
+      </main>
     </div>
+    
+    <div id="globalErr"></div>
 
     <script>
       const $ = (id) => document.getElementById(id);
       const storageKey = 'mintcode_admin_key';
-      const redeemWaitLimitSeconds = __REDEEM_WAIT_SECONDS__;
-
-      function getAdminKey() {
-        return ($('adminKey').value || '').trim();
-      }
-
-      let featuredItems = [];
-      async function loadFeatured() {
-        setErr('');
-        $('featuredOut').textContent = '';
-        const sku = (($('featSku').value || '').trim() || ($('cfgSku').value || '').trim());
-        if (!sku) {
-          $('featuredOut').textContent = 'Please input sku_id.';
-          return;
+      
+      // --- Auth & Nav ---
+      function init() {
+        const key = localStorage.getItem(storageKey);
+        if (key) {
+          showDashboard();
+        } else {
+          showLogin();
         }
-        const res = await apiFetch('/admin/sku/' + encodeURIComponent(sku) + '/provider-config/successes?limit=50');
-        const data = await res.json();
-        featuredItems = Array.isArray(data) ? data : [];
-        const body = $('featuredBody');
-        body.innerHTML = '';
-        for (let i = 0; i < featuredItems.length; i++) {
-          const f = featuredItems[i];
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td class="mono">${f.success_count}</td>
-            <td class="mono">${Number(f.avg_success_cost || 0).toFixed(4)}</td>
-            <td class="mono">${Number(f.total_success_cost || 0).toFixed(4)}</td>
-            <td class="mono">${(f.last_success_at || '').replace('T', ' ').replace('Z', '')}</td>
-            <td class="mono">${f.country}</td>
-            <td class="mono">${f.operator}</td>
-            <td class="mono">${f.product}</td>
-            <td class="mono">${f.reuse ? '1' : '0'}</td>
-            <td class="mono">${f.voice ? '1' : '0'}</td>
-            <td class="mono">${f.poll_interval_seconds}</td>
-            <td><button data-idx="${i}">Apply</button></td>
-          `;
-          tr.querySelector('button').addEventListener('click', () => {
-            try {
-              const idx = Number(tr.querySelector('button').getAttribute('data-idx'));
-              const item = featuredItems[idx];
-              if (!item) return;
-              $('cfgSku').value = item.sku_id;
-              $('cfgCategory').value = item.category || 'activation';
-              $('cfgCountry').value = item.country || '';
-              $('cfgOperator').value = item.operator || 'any';
-              $('cfgProduct').value = item.product || '';
-              $('cfgPoll').value = String(item.poll_interval_seconds || 5);
-              $('cfgReuse').checked = !!item.reuse;
-              $('cfgVoice').checked = !!item.voice;
-              $('cfgOut').textContent = 'Applied featured config. Click Save to set as current.';
-            } catch (e) {
-              setErr(String(e));
-            }
-          });
-          body.appendChild(tr);
+        
+        // Auto refresh setup
+        setInterval(() => {
+          if ($('dashboardView').style.display !== 'none' && $('autoRefresh').checked) {
+             const activeNav = document.querySelector('.nav-item.active').innerText;
+             if (activeNav.includes('Redeem') && document.getElementById('view-tasks').classList.contains('active')) {
+               loadTasks(true);
+             }
+          }
+        }, 2000);
+      }
+      
+      function showLogin() {
+        $('loginView').style.display = 'flex';
+        $('dashboardView').style.display = 'none';
+        $('loginKey').value = '';
+        $('loginKey').focus();
+      }
+      
+      function showDashboard() {
+        $('loginView').style.display = 'none';
+        $('dashboardView').style.display = 'flex';
+        loadTasks();
+      }
+      
+      async function doLogin() {
+        const key = $('loginKey').value.trim();
+        if (!key) return;
+        
+        // Verify key by making a lightweight call
+        localStorage.setItem(storageKey, key);
+        try {
+          await apiFetch('/admin/batches?limit=1');
+          showDashboard();
+        } catch (e) {
+          $('loginErr').style.display = 'block';
+          $('loginErr').innerText = '登录失败: Key 无效';
+          localStorage.removeItem(storageKey);
         }
-        $('featuredOut').textContent = 'Loaded ' + String(featuredItems.length) + ' items for sku_id=' + sku;
+      }
+      
+      function doLogout() {
+        localStorage.removeItem(storageKey);
+        showLogin();
+      }
+      
+      function nav(view) {
+        document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+        
+        $('view-' + view).classList.add('active');
+        
+        // Highlight nav item
+        const map = { 'tasks': 0, 'vouchers': 1, 'config': 2, 'test': 3 };
+        document.querySelectorAll('.nav-item')[map[view]].classList.add('active');
+        
+        if (view === 'tasks') loadTasks();
+        if (view === 'vouchers') loadBatches();
+        if (view === 'config') { /* lazy load */ }
       }
 
-      function setStatus(msg) {
-        $('keyStatus').textContent = msg || '';
-      }
-
-      function setErr(msg) {
-        $('err').textContent = msg || '';
+      function notify(msg, isErr=false) {
+        const el = $('globalErr');
+        el.innerText = msg;
+        el.style.backgroundColor = isErr ? '#fee2e2' : '#dcfce7';
+        el.style.color = isErr ? '#991b1b' : '#166534';
+        el.style.borderColor = isErr ? '#fecaca' : '#bbf7d0';
+        el.style.display = 'block';
+        setTimeout(() => { el.style.display = 'none'; }, 3000);
       }
 
       async function apiFetch(path, opts={}) {
-        const key = getAdminKey();
+        const key = localStorage.getItem(storageKey);
         const headers = new Headers(opts.headers || {});
         if (key) headers.set('X-Admin-Key', key);
-        const res = await fetch(path, { ...opts, headers });
-        if (!res.ok) {
-          const txt = await res.text();
-          throw new Error(res.status + ' ' + txt);
-        }
-        return res;
-      }
-
-      async function loadBatches() {
-        setErr('');
-        const sku = ($('batchSkuFilter').value || '').trim();
-        const qs = new URLSearchParams();
-        if (sku) qs.set('sku_id', sku);
-        qs.set('limit', '50');
-        const res = await apiFetch('/admin/batches?' + qs.toString());
-        const data = await res.json();
-        const body = $('batchesBody');
-        body.innerHTML = '';
-        for (const b of data) {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td class="mono">${b.id}</td>
-            <td class="mono">${b.sku_id}</td>
-            <td>${b.count}</td>
-            <td class="mono">${b.created_at}</td>
-            <td><button data-batch="${b.id}">Export</button></td>
-          `;
-          tr.querySelector('button').addEventListener('click', async () => {
-            try {
-              const r = await apiFetch('/admin/vouchers/export/batch/' + b.id);
-              $('exportOut').value = await r.text();
-            } catch (e) {
-              setErr(String(e));
-            }
-          });
-          body.appendChild(tr);
+        
+        try {
+          const res = await fetch(path, { ...opts, headers });
+          if (res.status === 401 || res.status === 403) {
+            doLogout();
+            throw new Error('Unauthorized');
+          }
+          if (!res.ok) {
+            const txt = await res.text();
+            throw new Error(txt || res.statusText);
+          }
+          return res;
+        } catch (e) {
+          if (e.message !== 'Unauthorized') notify(e.message, true);
+          throw e;
         }
       }
 
-      async function loadTasks() {
-        setErr('');
+      // --- Tasks ---
+      async function loadTasks(silent=false) {
+        if (!silent) $('tasksBody').innerHTML = '<tr><td colspan="8" style="text-align:center">Loading...</td></tr>';
         const status = $('taskStatus').value;
         const sku = ($('taskSku').value || '').trim();
         const qs = new URLSearchParams();
         if (status) qs.set('status', status);
         if (sku) qs.set('sku_id', sku);
-        qs.set('limit', '100');
-        const res = await apiFetch('/admin/redeem/tasks?' + qs.toString());
-        const data = await res.json();
+        qs.set('limit', '50');
+        
+        try {
+          const res = await apiFetch('/admin/redeem/tasks?' + qs.toString());
+          const data = await res.json();
+          renderTasks(data);
+        } catch (e) {
+          // handled by apiFetch
+        }
+      }
+      
+      function renderTasks(data) {
         const body = $('tasksBody');
         body.innerHTML = '';
-        for (const t of data) {
+        if (!data || data.length === 0) {
+          body.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--text-muted)">无数据</td></tr>';
+          return;
+        }
+        
+        data.forEach(t => {
           const tr = document.createElement('tr');
-          const v = (t.voucher_code || '').slice(0, 12) + ((t.voucher_code || '').length > 12 ? '…' : '');
-          const p = (t.phone || '').slice(0, 18) + ((t.phone || '').length > 18 ? '…' : '');
-          const err = (t.last_error || '').slice(0, 20) + ((t.last_error || '').length > 20 ? '…' : '');
-          const price = (t.price === null || t.price === undefined) ? '' : Number(t.price).toFixed(4);
+          const statusClass = `badge-${t.status}`;
+          const updated = (t.updated_at || '').replace('T', ' ').split('.')[0];
+          
+          let actionsHtml = '';
+          if (['PENDING','WAITING_SMS','PROCESSING','FAILED'].includes(t.status)) {
+             actionsHtml += `<button class="secondary" style="padding:2px 6px; font-size:12px; margin-right:4px" onclick="taskAction(${t.id}, 'cancel', '${t.voucher_code}')">取消</button>`;
+          }
+          if (t.status === 'CODE_READY') {
+             actionsHtml += `<button style="padding:2px 6px; font-size:12px;" onclick="taskAction(${t.id}, 'complete', '${t.voucher_code}')">完成</button>`;
+          }
+          if (t.status === 'CANCELED') {
+             actionsHtml += `<button class="secondary" style="padding:2px 6px; font-size:12px;" onclick="taskAction(${t.id}, 'next', '${t.voucher_code}')">重试</button>`;
+          }
+
           tr.innerHTML = `
             <td class="mono">${t.id}</td>
             <td class="mono">${t.sku_id}</td>
-            <td class="mono">${t.status}</td>
-            <td class="mono">${t.result_code || ''}</td>
-            <td class="mono" title="${t.phone || ''}">${p}</td>
-            <td class="mono">${t.order_id || ''}</td>
-            <td class="mono">${t.upstream_status || ''}</td>
-            <td class="mono">${price}</td>
-            <td class="mono" title="${t.last_error || ''}">${err}</td>
-            <td class="mono actions"></td>
-            <td class="mono" title="${t.voucher_code || ''}">${v}</td>
-            <td class="mono">${(t.updated_at || '').replace('T', ' ').replace('Z', '')}</td>
+            <td><span class="status-badge ${statusClass}">${t.status}</span></td>
+            <td class="mono">${t.phone || '-'}</td>
+            <td class="mono" style="color:var(--primary); font-weight:700">${t.result_code || '-'}</td>
+            <td class="mono" title="${t.voucher_code}">${t.voucher_code.slice(0,8)}...</td>
+            <td class="mono" style="font-size:12px">${updated}</td>
+            <td>${actionsHtml}</td>
           `;
-
-          const actions = tr.querySelector('.actions');
-          const canCancel = (t.status === 'WAITING_SMS' || t.status === 'PENDING' || t.status === 'PROCESSING' || t.status === 'FAILED');
-          const canNext = (t.status === 'CANCELED');
-          const canComplete = (t.status === 'CODE_READY');
-          if (canCancel) {
-            const btnCancel = document.createElement('button');
-            btnCancel.textContent = '取消';
-            btnCancel.addEventListener('click', async () => {
-              try {
-                await apiFetch('/redeem/' + String(t.id) + '/cancel', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ code: t.voucher_code }),
-                });
-                await loadTasks();
-              } catch (e) { setErr(String(e)); }
-            });
-            actions.appendChild(btnCancel);
-          }
-          if (canNext) {
-            const btnNext = document.createElement('button');
-            btnNext.textContent = '购买下一个号码';
-            btnNext.addEventListener('click', async () => {
-              try {
-                await apiFetch('/redeem/' + String(t.id) + '/next', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ code: t.voucher_code }),
-                });
-                await loadTasks();
-              } catch (e) { setErr(String(e)); }
-            });
-            actions.appendChild(btnNext);
-          }
-          if (canComplete) {
-            const btnComplete = document.createElement('button');
-            btnComplete.textContent = '完成';
-            btnComplete.addEventListener('click', async () => {
-              try {
-                await apiFetch('/redeem/' + String(t.id) + '/complete', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ code: t.voucher_code }),
-                });
-                await loadTasks();
-              } catch (e) { setErr(String(e)); }
-            });
-            actions.appendChild(btnComplete);
-          }
           body.appendChild(tr);
-        }
+        });
+      }
+      
+      async function taskAction(id, action, code) {
+        try {
+          await apiFetch(`/redeem/${id}/${action}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({code})
+          });
+          loadTasks(true);
+          notify(`Action ${action} success`);
+        } catch (e) { }
       }
 
+      // --- Vouchers ---
       async function doGenerate() {
-        setErr('');
-        const payload = {
-          sku_id: ($('genSku').value || '').trim() || null,
-          count: Number($('genCount').value || 10),
-          length: Number($('genLen').value || 32),
-          label: ($('genLabel').value || '').trim() || null,
-          label_length: 6,
-          label_pos: 8,
-        };
-        const res = await apiFetch('/admin/vouchers/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        $('genOut').value = await res.text();
-        await loadBatches();
+        const btn = document.querySelector('#view-vouchers button');
+        btn.disabled = true; btn.innerText = 'Generating...';
+        try {
+           const payload = {
+             sku_id: ($('genSku').value || '').trim() || null,
+             count: Number($('genCount').value || 10),
+             length: Number($('genLen').value || 32),
+             label: ($('genLabel').value || '').trim() || null
+           };
+           const res = await apiFetch('/admin/vouchers/generate', {
+             method: 'POST',
+             headers: {'Content-Type': 'application/json'},
+             body: JSON.stringify(payload)
+           });
+           $('genOut').value = await res.text();
+           loadBatches();
+           notify('Generation complete');
+        } finally {
+           btn.disabled = false; btn.innerText = '生成';
+        }
+      }
+      
+      async function loadBatches() {
+         const qs = new URLSearchParams({limit: '20'});
+         if ($('batchSkuFilter').value) qs.set('sku_id', $('batchSkuFilter').value);
+         
+         const res = await apiFetch('/admin/batches?' + qs.toString());
+         const data = await res.json();
+         const tbody = $('batchesBody');
+         tbody.innerHTML = '';
+         data.forEach(b => {
+           const tr = document.createElement('tr');
+           tr.innerHTML = `
+             <td class="mono">${b.id}</td>
+             <td class="mono">${b.sku_id}</td>
+             <td>${b.count}</td>
+             <td class="mono">${(b.created_at||'').split('T')[0]}</td>
+             <td><button class="secondary" style="padding:2px 8px" onclick="exportBatch(${b.id})">Export</button></td>
+           `;
+           tbody.appendChild(tr);
+         });
+      }
+      
+      async function exportBatch(id) {
+         const res = await apiFetch('/admin/vouchers/export/batch/' + id);
+         $('exportOut').value = await res.text();
       }
 
+      // --- Config ---
       async function loadSkuConfig() {
-        setErr('');
-        $('cfgOut').textContent = '';
-        const sku = ($('cfgSku').value || '').trim();
-        if (!sku) {
-          $('cfgOut').textContent = 'Please input sku_id.';
-          return;
-        }
-        const res = await apiFetch('/admin/sku/' + encodeURIComponent(sku) + '/provider-config');
-        const data = await res.json();
-        $('cfgCategory').value = data.category || 'activation';
-        $('cfgCountry').value = data.country || '';
-        $('cfgOperator').value = data.operator || 'any';
-        $('cfgProduct').value = data.product || '';
-        $('cfgPoll').value = String(data.poll_interval_seconds || 5);
-        $('cfgReuse').checked = !!data.reuse;
-        $('cfgVoice').checked = !!data.voice;
-        $('cfgOut').textContent = 'Loaded.';
-        await loadSkuConfigHistory();
+         const sku = $('cfgSku').value.trim();
+         if(!sku) return notify('Please enter SKU', true);
+         
+         const res = await apiFetch('/admin/sku/' + encodeURIComponent(sku) + '/provider-config');
+         const d = await res.json();
+         $('cfgCountry').value = d.country || '';
+         $('cfgOperator').value = d.operator || '';
+         $('cfgProduct').value = d.product || '';
+         $('cfgCategory').value = d.category || 'activation';
+         $('cfgPoll').value = d.poll_interval_seconds || 5;
+         $('cfgReuse').checked = !!d.reuse;
+         $('cfgVoice').checked = !!d.voice;
+         
+         loadConfigHistory(sku);
+         notify('Config loaded');
       }
-
-      let cfgHistItems = [];
-      async function loadSkuConfigHistory() {
-        const sku = ($('cfgSku').value || '').trim();
-        if (!sku) return;
-        const sel = $('cfgHist');
-        sel.innerHTML = '';
-        cfgHistItems = [];
-        try {
-          const res = await apiFetch('/admin/sku/' + encodeURIComponent(sku) + '/provider-config/history?limit=30');
-          const data = await res.json();
-          if (!Array.isArray(data)) return;
-          cfgHistItems = data;
-          for (let i = 0; i < data.length; i++) {
-            const h = data[i];
-            const opt = document.createElement('option');
-            const label = `${h.created_at}  ${h.country}/${h.operator}/${h.product}  poll=${h.poll_interval_seconds}`;
-            opt.value = String(i);
-            opt.textContent = label;
-            sel.appendChild(opt);
-          }
-        } catch (e) {
-          // ignore
-        }
-      }
-
-      function applyHistoryItem(h) {
-        if (!h) return;
-        $('cfgCategory').value = h.category || 'activation';
-        $('cfgCountry').value = h.country || '';
-        $('cfgOperator').value = h.operator || 'any';
-        $('cfgProduct').value = h.product || '';
-        $('cfgPoll').value = String(h.poll_interval_seconds || 5);
-        $('cfgReuse').checked = !!h.reuse;
-        $('cfgVoice').checked = !!h.voice;
-        $('cfgOut').textContent = 'Loaded from history.';
-      }
-
+      
       async function saveSkuConfig() {
-        setErr('');
-        $('cfgOut').textContent = '';
-        const sku = ($('cfgSku').value || '').trim();
-        if (!sku) {
-          $('cfgOut').textContent = 'Please input sku_id.';
-          return;
-        }
-        const payload = {
-          provider: 'fivesim',
-          category: $('cfgCategory').value,
-          country: ($('cfgCountry').value || '').trim(),
-          operator: ($('cfgOperator').value || '').trim() || 'any',
-          product: ($('cfgProduct').value || '').trim(),
-          reuse: $('cfgReuse').checked,
-          voice: $('cfgVoice').checked,
-          poll_interval_seconds: Number($('cfgPoll').value || 5),
-        };
-        const res = await apiFetch('/admin/sku/' + encodeURIComponent(sku) + '/provider-config', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
+         const sku = $('cfgSku').value.trim();
+         if(!sku) return;
+         
+         const payload = {
+           provider: 'fivesim',
+           country: $('cfgCountry').value.trim(),
+           operator: $('cfgOperator').value.trim() || 'any',
+           product: $('cfgProduct').value.trim(),
+           category: $('cfgCategory').value,
+           poll_interval_seconds: Number($('cfgPoll').value),
+           reuse: $('cfgReuse').checked,
+           voice: $('cfgVoice').checked
+         };
+         
+         await apiFetch('/admin/sku/' + encodeURIComponent(sku) + '/provider-config', {
+           method: 'PUT',
+           headers: {'Content-Type': 'application/json'},
+           body: JSON.stringify(payload)
+         });
+         notify('Config saved');
+         loadConfigHistory(sku);
+      }
+      
+      async function loadConfigHistory(sku) {
+         const res = await apiFetch('/admin/sku/' + encodeURIComponent(sku) + '/provider-config/history?limit=20');
+         const data = await res.json();
+         const sel = $('cfgHist');
+         sel.innerHTML = '<option value="">Select from history...</option>';
+         data.forEach((h, i) => {
+           const opt = document.createElement('option');
+           opt.text = `${h.created_at.split('T')[0]} - ${h.country}/${h.operator}`;
+           // We could store full data in memory, but for simplicity just show log
+           sel.appendChild(opt);
+         });
+      }
+      
+      async function loadFeatured() {
+        const sku = $('featSku').value.trim() || $('cfgSku').value.trim();
+        if(!sku) return notify('Enter SKU for featured', true);
+        
+        const res = await apiFetch(`/admin/sku/${encodeURIComponent(sku)}/provider-config/successes?limit=20`);
         const data = await res.json();
-        $('cfgOut').textContent = 'Saved for sku_id=' + data.sku_id;
-        await loadSkuConfigHistory();
+        const tbody = $('featuredBody');
+        tbody.innerHTML = '';
+        data.forEach(f => {
+           const tr = document.createElement('tr');
+           tr.innerHTML = `
+             <td>${f.success_count}</td>
+             <td>${Number(f.avg_success_cost).toFixed(2)}</td>
+             <td class="mono">${(f.last_success_at||'').split('T')[0]}</td>
+             <td class="mono">${f.country}/${f.operator}</td>
+             <td><button class="secondary" style="padding:2px 8px" onclick="applyFeatured('${f.country}','${f.operator}','${f.product}')">Apply</button></td>
+           `;
+           tbody.appendChild(tr);
+        });
+      }
+      
+      function applyFeatured(c, o, p) {
+         $('cfgCountry').value = c;
+         $('cfgOperator').value = o;
+         $('cfgProduct').value = p;
+         notify('Applied to form (Click Save to commit)');
       }
 
+      // --- Manual ---
       async function doRedeem() {
-        setErr('');
-        $('redeemOut').textContent = '';
-        $('redeemActions').innerHTML = '';
-        const code = ($('redeemCode').value || '').trim();
-        if (!code) {
-          $('redeemOut').textContent = 'Please input voucher code.';
-          return;
-        }
-        const res = await apiFetch('/redeem', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code }),
-        });
-        const data = await res.json();
-        $('redeemOut').textContent = `Created task_id=${data.task_id}, status=${data.status}`;
-        renderRedeemActions(data);
-        await loadTasks();
-        pollRedeemStatus(data.task_id).catch(e => setErr(String(e)));
+         const code = $('redeemCode').value.trim();
+         if(!code) return notify('Input code', true);
+         $('redeemOut').innerText = 'Starting...';
+         const res = await apiFetch('/redeem', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({code})
+         });
+         const d = await res.json();
+         $('redeemOut').innerText = JSON.stringify(d, null, 2);
+         loadTasks(true);
       }
 
-      function renderRedeemActions(d) {
-        const wrap = $('redeemActions');
-        wrap.innerHTML = '';
-        if (!d || !d.task_id) return;
-
-        const voucherCode = ($('redeemCode').value || '').trim();
-        const taskId = String(d.task_id);
-
-        const mkBtn = (text, onClick) => {
-          const b = document.createElement('button');
-          b.textContent = text;
-          b.addEventListener('click', () => onClick().catch(e => setErr(String(e))));
-          return b;
-        };
-
-        const canCancel = (d.status === 'WAITING_SMS' || d.status === 'PENDING' || d.status === 'PROCESSING' || d.status === 'FAILED');
-        const canNext = (d.status === 'CANCELED' || d.status === 'FAILED');
-        const canComplete = (d.status === 'CODE_READY');
-
-        if (canCancel) {
-          wrap.appendChild(mkBtn('取消', async () => {
-            await apiFetch('/redeem/' + taskId + '/cancel', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ code: voucherCode }),
-            });
-            await pollRedeemStatus(Number(taskId));
-          }));
-        }
-
-        if (canNext) {
-          const hint = document.createElement('div');
-          hint.className = 'muted';
-          hint.style.marginRight = '10px';
-          hint.textContent = '该卡密当前已结束/取消。再次 Redeem 会继续使用同一个任务；如需重新下单请点击：';
-          wrap.appendChild(hint);
-          wrap.appendChild(mkBtn('购买下一个号码', async () => {
-            await apiFetch('/redeem/' + taskId + '/next', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ code: voucherCode }),
-            });
-            await pollRedeemStatus(Number(taskId));
-          }));
-        }
-
-        if (canComplete) {
-          wrap.appendChild(mkBtn('完成', async () => {
-            await apiFetch('/redeem/' + taskId + '/complete', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ code: voucherCode }),
-            });
-            await pollRedeemStatus(Number(taskId));
-          }));
-        }
-      }
-
-      let redeemPollTimer = null;
-      async function pollRedeemStatus(taskId) {
-        if (redeemPollTimer) clearInterval(redeemPollTimer);
-        redeemPollTimer = null;
-
-        const tick = async () => {
-          const r = await apiFetch('/redeem/' + String(taskId));
-          const d = await r.json();
-          const phone = d.phone ? ` phone=${d.phone}` : '';
-          const upstream = d.upstream_status ? ` upstream=${d.upstream_status}` : '';
-          const code = d.result_code ? ` code=${d.result_code}` : '';
-          let remain = '';
-          if (d.status === 'WAITING_SMS' || d.status === 'PROCESSING' || d.status === 'PENDING' || d.status === 'CODE_READY') {
-            let left = null;
-            if (d.expires_at) {
-              const ex = Date.parse(d.expires_at);
-              if (!Number.isNaN(ex)) {
-                left = Math.max(0, Math.floor((ex - Date.now()) / 1000));
-              }
-            }
-            if (left === null && d.provider_started_at) {
-              const ms = Date.parse(d.provider_started_at);
-              if (!Number.isNaN(ms)) {
-                const elapsed = Math.floor((Date.now() - ms) / 1000);
-                left = Math.max(0, redeemWaitLimitSeconds - elapsed);
-              }
-            }
-            if (left !== null) remain = ` wait_left=${left}s`;
-          }
-          $('redeemOut').textContent = `task_id=${d.task_id}, status=${d.status}${phone}${upstream}${remain}${code}`;
-          renderRedeemActions(d);
-          if (d.phone) {
-            $('redeemOut').textContent += `\nUse this phone to trigger SMS on the target platform (register/login).`;
-          }
-          if (d.status === 'DONE' || d.status === 'FAILED' || d.status === 'CANCELED') {
-            if (redeemPollTimer) clearInterval(redeemPollTimer);
-            redeemPollTimer = null;
-          }
-          await loadTasks();
-        };
-
-        await tick();
-        redeemPollTimer = setInterval(() => {
-          tick().catch(e => setErr(String(e)));
-        }, 1500);
-      }
-
-      function loadKeyFromStorage() {
-        const k = localStorage.getItem(storageKey) || '';
-        $('adminKey').value = k;
-        setStatus(k ? 'loaded from localStorage' : '');
-      }
-
-      function saveKeyToStorage() {
-        const k = getAdminKey();
-        localStorage.setItem(storageKey, k);
-        setStatus(k ? 'saved' : 'cleared');
-      }
-
-      let timer = null;
-      function resetAutoRefresh() {
-        if (timer) clearInterval(timer);
-        timer = null;
-        const sec = Number($('autoRefresh').value || 0);
-        if (sec > 0) {
-          timer = setInterval(() => {
-            loadTasks().catch(() => {});
-          }, sec * 1000);
-        }
-      }
-
-      $('saveKey').addEventListener('click', () => { saveKeyToStorage(); });
-      $('refreshAll').addEventListener('click', async () => {
-        try {
-          await loadBatches();
-          await loadTasks();
-        } catch (e) {
-          setErr(String(e));
-        }
-      });
-      $('loadBatches').addEventListener('click', () => loadBatches().catch(e => setErr(String(e))));
-      $('loadTasks').addEventListener('click', () => loadTasks().catch(e => setErr(String(e))));
-      $('doGenerate').addEventListener('click', () => doGenerate().catch(e => setErr(String(e))));
-      $('cfgLoad').addEventListener('click', () => loadSkuConfig().catch(e => setErr(String(e))));
-      $('cfgSave').addEventListener('click', () => saveSkuConfig().catch(e => setErr(String(e))));
-      $('loadFeatured').addEventListener('click', () => loadFeatured().catch(e => setErr(String(e))));
-      $('cfgHistLoad').addEventListener('click', () => {
-        try {
-          const idx = Number(($('cfgHist').value || '0'));
-          const h = cfgHistItems[idx];
-          applyHistoryItem(h);
-        } catch (e) { setErr(String(e)); }
-      });
-      $('doRedeem').addEventListener('click', () => doRedeem().catch(e => setErr(String(e))));
-      $('autoRefresh').addEventListener('change', resetAutoRefresh);
-
-      loadKeyFromStorage();
-      resetAutoRefresh();
-      $('refreshAll').click();
+      // Boot
+      init();
     </script>
   </body>
 </html>"""

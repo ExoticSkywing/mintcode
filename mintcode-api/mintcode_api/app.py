@@ -25,7 +25,7 @@ def create_app() -> FastAPI:
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>MintCode Admin</title>
+    <title>薄荷码工坊 Admin</title>
     <style>
       :root {
         --bg: #ffffff; --bg-alt: #f8fafc; --text: #0f172a; --text-muted: #64748b;
@@ -145,8 +145,8 @@ def create_app() -> FastAPI:
     <div id="loginView">
       <div class="login-card">
         <div class="login-header">
-          <h1>MintCode Admin</h1>
-          <p>请输入管理员密钥以继续</p>
+          <h1>薄荷码工坊 Admin</h1>
+          <p>薄荷一下，码上拥有</p>
         </div>
         <div style="margin-bottom: 20px;">
           <label>Admin Key</label>
@@ -160,7 +160,7 @@ def create_app() -> FastAPI:
     <!-- Dashboard View -->
     <div id="dashboardView" style="display: none;">
       <aside>
-        <div class="brand">MintCode</div>
+        <div class="brand">薄荷码工坊 <small style="font-size:12px;opacity:0.6;font-weight:400">MintCode</small></div>
         <nav>
           <div class="nav-item active" onclick="nav('tasks')">兑换任务 (Redeem)</div>
           <div class="nav-item" onclick="nav('vouchers')">卡密管理 (Vouchers)</div>
@@ -704,7 +704,7 @@ def create_app() -> FastAPI:
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-  <title>MintCode 兑换</title>
+  <title>薄荷码工坊</title>
   <style>
     :root {
       --primary: #6366f1;
@@ -1145,8 +1145,8 @@ def create_app() -> FastAPI:
 <body>
   <div class="container">
     <div class="logo">
-      <h1>MintCode</h1>
-      <p>短信验证码兑换服务</p>
+      <h1>薄荷码工坊</h1>
+      <p>薄荷一下，码上拥有</p>
     </div>
 
     <!-- 输入卡片 -->

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from mintcode_api.config import settings
 from mintcode_api.db import Base, engine

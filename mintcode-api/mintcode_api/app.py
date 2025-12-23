@@ -1212,10 +1212,6 @@ def create_app() -> FastAPI:
       <div class="hint" id="hintText"></div>
     </div>
 
-    <!-- 新兑换按钮 -->
-    <div id="newRedeemSection" style="display:none;">
-      <button class="btn btn-outline" onclick="resetUI()">兑换新的验证码</button>
-    </div>
   </div>
 
   <script>
@@ -1491,7 +1487,6 @@ def create_app() -> FastAPI:
       // Final states
       if (['DONE', 'FAILED', 'CANCELED'].includes(status)) {
         stopPolling();
-        document.getElementById('newRedeemSection').style.display = 'block';
         document.getElementById('timerRow').style.display = 'none';
       }
     }
@@ -1549,7 +1544,6 @@ def create_app() -> FastAPI:
       document.getElementById('voucher').value = '';
       document.getElementById('inputCard').style.display = 'block';
       document.getElementById('statusCard').classList.remove('active', 'fade-in');
-      document.getElementById('newRedeemSection').style.display = 'none';
       document.getElementById('phoneSection').style.display = 'none';
       document.getElementById('codeSection').style.display = 'none';
       document.getElementById('timerRow').style.display = 'none';

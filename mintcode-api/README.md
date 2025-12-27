@@ -30,6 +30,13 @@ uvicorn mintcode_api.app:app --reload --host 0.0.0.0 --port 8000
 docker compose up --build
 ```
 
+### 更新升级
+
+```bash
+docker compose exec -T api sh -lc "alembic upgrade head"
+docker compose restart api
+```
+
 访问：`http://127.0.0.1:8000/docs`
 
 ---

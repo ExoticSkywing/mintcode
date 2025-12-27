@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import logging
+
+import sqlalchemy as sa
+from alembic.config import Config as AlembicConfig
+from alembic.script import ScriptDirectory
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, RedirectResponse
 
@@ -9,6 +14,33 @@ from mintcode_api.routes_admin import router as admin_router
 from mintcode_api.routes_dev import router as dev_router
 from mintcode_api.routes_health import router as health_router
 from mintcode_api.routes_redeem import router as redeem_router
+
+
+_log = logging.getLogger("mintcode_api")
+
+
+def _ensure_db_schema_current() -> None:
+    cfg = AlembicConfig("alembic.ini")
+    script = ScriptDirectory.from_config(cfg)
+    heads = list(script.get_heads())
+    expected = heads[0] if heads else ""
+
+    with engine.connect() as conn:
+        try:
+            current = conn.execute(sa.text("SELECT version_num FROM alembic_version")).scalar_one()
+        except Exception:
+            current = None
+
+    if not expected:
+        return
+
+    if current != expected:
+        msg = (
+            "Database schema is out of date (alembic_version=%s, code_head=%s). "
+            "Run: docker compose exec -T api sh -lc 'alembic upgrade head'"
+        ) % (current, expected)
+        _log.error(msg)
+        raise RuntimeError(msg)
 
 
 def create_app() -> FastAPI:
@@ -1709,6 +1741,8 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     def _startup() -> None:
+        _ensure_db_schema_current()
+
         if bool(getattr(settings, "db_auto_create_tables", True)):
             Base.metadata.create_all(bind=engine)
 
